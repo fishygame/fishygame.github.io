@@ -2,6 +2,8 @@
 
 A small "eat smaller fish, avoid bigger fish" game built with TypeScript, HTML5 Canvas and Vite.
 
+Play it at https://fishygame.github.io
+
 ## Run it
 
 ```bash
@@ -10,6 +12,9 @@ npm run dev      # opens a dev server with hot reload (http://localhost:5173)
 npm run build    # typechecks and outputs a static site to dist/
 npm run deploy   # builds and publishes dist/ to the gh-pages branch (GitHub Pages)
 ```
+
+Deploying pushes with the GitHub CLI's active account (`gh auth status`), which needs write access
+to the fishygame org.
 
 ## Controls
 
