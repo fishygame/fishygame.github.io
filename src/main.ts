@@ -7,13 +7,14 @@ type State = "playing" | "dead" | "won";
 
 // ---- tuning ----
 const START_RADIUS = 14;
-const WIN_RADIUS = 120;
+// Past this share of the win size nothing outgrows you and sharks stop coming, so the end of the
+// game is a feeding frenzy.
+const TOP_FISH_SHARE = 0.55;
 const GROWTH = 0.15; // fraction of eaten fish's area added to the player
 const MAX_FISH = 18;
 const SPAWN_INTERVAL = 0.45; // seconds between spawn attempts
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const SHARK_CHANCE = 0.07; // sharks can't be eaten, whatever their size
-const MAX_FISH_RADIUS = 320;
 const PLAYER_MAX_SPEED = 280;
 const PLAYER_ACCEL = 500; // px/s², so about half a second from standstill to full speed
 const PLAYER_DRAG = 3; // how quickly you coast to a stop with no keys held
@@ -44,6 +45,11 @@ function resize(): void {
 }
 window.addEventListener("resize", resize);
 resize();
+
+/** You win once you nearly fill the screen. A fish is drawn about 3r long and 2r tall. */
+function winRadius(): number {
+  return Math.max(START_RADIUS * 4, Math.min(W * 0.3, H * 0.55));
+}
 
 // ---- input ----
 const sound = new Sound();
@@ -197,8 +203,9 @@ function endGame(next: State): void {
 
 // ---- spawning ----
 function spawnFish(): void {
+  const topSize = winRadius() * TOP_FISH_SHARE;
   const roll = Math.random();
-  const shark = roll < SHARK_CHANCE;
+  const shark = player.r < topSize && roll < SHARK_CHANCE;
   const giant = !shark && roll < SHARK_CHANCE + GIANT_CHANCE;
   let r: number;
   if (shark) {
@@ -211,14 +218,14 @@ function spawnFish(): void {
       Math.random() < 0.65 ? 0.3 + Math.random() * 0.65 : 1.05 + Math.random() * 0.8;
     r = Math.max(6, player.r * ratio);
   }
-  r = Math.min(MAX_FISH_RADIUS, r);
+  r = Math.min(topSize, r);
 
   const fromLeft = Math.random() < 0.5;
   // giants cruise slowly so there's time to get out of the way
   let speed = 40 + Math.random() * 100 + 300 / (r + 10);
   if (giant) speed = 30 + Math.random() * 40;
   if (shark) speed = 110 + Math.random() * 80;
-  const margin = r * 3;
+  const margin = r * 1.5; // just out of sight, so big ones don't take ages to arrive
   const x = fromLeft ? -margin : W + margin;
   const y = r * 0.6 + Math.random() * Math.max(1, H - SAND_HEIGHT - r * 0.6);
   const vy = (Math.random() - 0.5) * 30;
@@ -290,12 +297,11 @@ function update(dt: number): void {
     if (touching(f)) {
       if (f.kind !== "shark" && player.r > f.r) {
         // bigger meals and a bigger you both make for a deeper burp
-        const growth = (player.r - START_RADIUS) / (WIN_RADIUS - START_RADIUS);
-        sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * growth));
+        sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * GROWTH);
         score += Math.round(f.r);
         fish.splice(i, 1);
-        if (player.r >= WIN_RADIUS) {
+        if (player.r >= winRadius()) {
           endGame("won");
           return;
         }
@@ -307,6 +313,11 @@ function update(dt: number): void {
       }
     }
   }
+}
+
+/** How far you are from starting size (0) to winning size (1). */
+function progress(): number {
+  return Math.min(1, (player.r - START_RADIUS) / (winRadius() - START_RADIUS));
 }
 
 function touching(f: Fish): boolean {
@@ -341,11 +352,10 @@ function drawHud(): void {
 
   // growth bar toward the win size
   const barW = 200;
-  const progress = Math.min(1, (player.r - START_RADIUS) / (WIN_RADIUS - START_RADIUS));
   ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
   ctx.fillRect(16, 46, barW, 10);
   ctx.fillStyle = "#ffd166";
-  ctx.fillRect(16, 46, barW * progress, 10);
+  ctx.fillRect(16, 46, barW * progress(), 10);
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
   ctx.font = "14px system-ui, sans-serif";
@@ -432,6 +442,11 @@ function drawOverlay(title: string, subtitle: string): void {
     killer.draw(ctx, time, true);
     player.draw(ctx, time);
   }
+  // and show off how enormous you got
+  if (state === "won") player.draw(ctx, time);
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 8;
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -441,6 +456,7 @@ function drawOverlay(title: string, subtitle: string): void {
   ctx.fillText(`Score: ${score}`, W / 2, H / 2 + 20);
   ctx.font = "18px system-ui, sans-serif";
   ctx.fillText(subtitle, W / 2, H / 2 + 60);
+  ctx.restore();
 }
 
 function draw(): void {
