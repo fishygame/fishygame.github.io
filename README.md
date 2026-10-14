@@ -25,7 +25,7 @@ to the fishygame org.
   The buttons in the top-right corner pause and mute.
 - Eat fish smaller than you to grow. Touch a bigger fish and it's game over. Watch out for
   slow-moving giants.
-- Sharks can't be eaten, until you're over halfway to the win size. From then on nothing can eat
+- Sharks can't be eaten (and most now and then double back in a quick Z), until you're over halfway to the win size. From then on nothing can eat
   you and the screen fills with smaller fish: a feeding frenzy.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.

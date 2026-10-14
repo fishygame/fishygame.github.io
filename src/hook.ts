@@ -82,6 +82,7 @@ export class Hook {
   }
 
   private reelIn(): void {
+    if (this.phase === "reel") return; // snagged something on the way up: keep the pace
     this.phase = "reel";
     this.timer = 0;
   }
@@ -100,7 +101,8 @@ export class Hook {
 
   /** The hook and worm as a circle a fish can run into, or null if there's nothing to bite. */
   bait(time: number): { x: number; y: number; radius: number } | null {
-    if (this.phase === "idle" || this.phase === "reel" || this.snapped || this.caught) return null;
+    // an empty hook on its way up still snags anything it runs into
+    if (this.phase === "idle" || this.snapped || this.caught || this.catch) return null;
     const { x, y } = this.position(time);
     const s = TACKLE_SCALE;
     return { x: x - 5 * s, y: y + 12 * s, radius: 14 * s };
@@ -112,11 +114,10 @@ export class Hook {
     this.reelIn();
   }
 
-  /** Whether the hook is waiting for this (non-player) fish to bite. */
+  /** Whether this (non-player) fish would get caught running into the hook right now. */
   wants(f: Fish): boolean {
-    return (
-      this.lurking && !this.catch && f.kind === "fish" && f.r >= CATCH_RADIUS[0] && f.r <= CATCH_RADIUS[1]
-    );
+    const biting = this.lurking || this.phase === "reel"; // waiting for a bite, or on its way up
+    return biting && !this.catch && f.kind === "fish" && f.r >= CATCH_RADIUS[0] && f.r <= CATCH_RADIUS[1];
   }
 
   /** Hook some other fish. It belongs to the hook now: the caller should drop it from play. */

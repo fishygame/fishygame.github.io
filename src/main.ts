@@ -13,6 +13,8 @@ const START_RADIUS = 14;
 // game is a feeding frenzy (see FRENZY_* below).
 const TOP_FISH_SHARE = 0.55;
 const GROWTH = 0.15; // fraction of eaten fish's area added to the player
+const FRENZY_GROWTH = 0.09; // less in the frenzy, so the eat-everything part lasts longer
+const MIN_FOOD = 6; // always at least this many fish you can eat around (outside the frenzy)
 const MAX_FISH = 18;
 // Once fish get big, 18 of them would pack the screen. Instead cap how much of the screen their
 // bodies cover, and how much of that can be fish that eat you, so there's always room to dodge.
@@ -38,6 +40,7 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const SHARK_CHANCE = 0.07; // sharks can't be eaten, whatever their size
+const DARTER_CHANCE = 0.6; // share of sharks that now and then cut back in a quick Z
 const PLAYER_SPEED_SMALL = 320; // top speed when you start out tiny...
 const PLAYER_SPEED_BIG = 200; // ...slowing down to this by the win size
 const PLAYER_ACCEL = 500; // px/s², so about half a second from standstill to full speed
@@ -423,10 +426,10 @@ function spawnFish(): void {
     const [lo, hi] = [ease(EARLY_BIGGER[0], BIGGER[0]), ease(EARLY_BIGGER[1], BIGGER[1])];
     // keep the fish on screen at the right mix of food and danger, rather than leaving it to chance
     const food = fish.filter((f) => !dangerous(f)).length;
-    const ratio =
-      food + 1 <= foodShare() * (fish.length + 1)
-        ? 0.3 + Math.random() * 0.65
-        : lo + Math.random() * (hi - lo);
+    let ratio = lo + Math.random() * (hi - lo);
+    if (food + 1 <= foodShare() * (fish.length + 1)) ratio = 0.3 + Math.random() * 0.65;
+    // when there's only room for a few big fish, top up with small snacks so it's never empty
+    else if (food < MIN_FOOD) ratio = 0.2 + Math.random() * 0.3;
     r = Math.max(6, player.r * ratio);
   }
   r = Math.min(topSize, r);
@@ -448,7 +451,9 @@ function spawnFish(): void {
   const vy = (Math.random() - 0.5) * 30;
   const hue = 170 + Math.random() * 160; // blues/greens/purples, so the player (orange) stands out
 
-  fish.push(new Fish(x, y, fromLeft ? speed : -speed, vy, r, hue, shark ? "shark" : "fish"));
+  const f = new Fish(x, y, fromLeft ? speed : -speed, vy, r, hue, shark ? "shark" : "fish");
+  f.darter = shark && Math.random() < DARTER_CHANCE;
+  fish.push(f);
 }
 
 /** Past the top fish size, nothing can eat you any more. */
@@ -578,7 +583,7 @@ function update(dt: number): void {
       if (!dangerous(f)) {
         // bigger meals and a bigger you both make for a deeper burp
         sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
-        player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * GROWTH);
+        player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
         score += Math.round(f.r);
         fish.splice(i, 1);
         if (player.r >= winRadius()) {

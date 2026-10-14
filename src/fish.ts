@@ -13,7 +13,13 @@ export class Fish {
   facing: 1 | -1 = 1;
   skeleton = false; // what's left of the player after getting eaten
   flip = 0; // 0 upright .. 1 belly-up; in between it's mid-roll
-  angle = 0; // tilt in radians, for hanging off a hook
+  angle = 0; // tilt in radians, for hanging off a hook or leaning into a turn
+  darter = false; // now and then cuts back in a quick Z before carrying on (sharks)
+  private dart: "cruise" | "back" = "cruise";
+  private dartTimer = 2 + Math.random() * 3; // cruise: until the next dart; back: until turning forward again
+  private cruiseVx = 0;
+  private cruiseVy = 0;
+  private surge = 0; // extra forward speed coming out of a dart, fading out
   private phase = Math.random() * Math.PI * 2;
   // The parts that don't animate, painted once and reused every frame (see cached())
   private sprite: HTMLCanvasElement | null = null;
@@ -42,8 +48,37 @@ export class Fish {
   }
 
   update(dt: number): void {
-    this.x += this.vx * dt;
+    if (this.darter) this.darting(dt);
+    this.x += this.vx * (1 + this.surge) * dt;
     this.y += this.vy * dt;
+  }
+
+  /**
+   * A dart is a Z: turn around and cut back diagonally up or down, then turn around again and
+   * shoot off the original way with a burst of speed. In between, it cruises as normal.
+   */
+  private darting(dt: number): void {
+    this.dartTimer -= dt;
+    if (this.dart === "cruise" && this.dartTimer <= 0) {
+      this.cruiseVx = this.vx;
+      this.cruiseVy = this.vy;
+      this.dart = "back";
+      this.dartTimer = 0.45 + Math.random() * 0.25;
+      this.vx = -this.cruiseVx * 0.9;
+      this.vy = (Math.random() < 0.5 ? -1 : 1) * (150 + Math.random() * 60);
+      this.facing = this.vx > 0 ? 1 : -1;
+    } else if (this.dart === "back" && this.dartTimer <= 0) {
+      this.dart = "cruise";
+      this.dartTimer = 3 + Math.random() * 3;
+      this.vx = this.cruiseVx;
+      this.vy = this.cruiseVy;
+      this.facing = this.vx > 0 ? 1 : -1;
+      this.surge = 0.8;
+    }
+    this.surge *= Math.exp(-2.5 * dt);
+    // lean along the diagonal; kept small, since the hitbox stays level
+    const lean = this.dart === "back" ? Math.max(-0.3, Math.min(0.3, Math.atan2(this.vy, Math.abs(this.vx)))) : 0;
+    this.angle += (this.facing * lean - this.angle) * Math.min(1, dt * 10);
   }
 
   /** Draw the fish. `danger` swaps the outline for a red one (fish that can eat the player). */
