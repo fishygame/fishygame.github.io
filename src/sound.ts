@@ -159,6 +159,41 @@ export class Sound {
     });
   }
 
+  /** Hooked: a reel clicking away faster and faster, under a slide whistle going up. */
+  caught(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const len = 1.4;
+
+    this.musicBus.gain.setTargetAtTime(0.15, t, 0.05);
+    this.musicBus.gain.setTargetAtTime(MUSIC_GAIN, t + 2.4, 0.4);
+
+    // reel ratchet: clicks that speed up as the line winds in
+    for (let at = 0, gap = 0.09; at < len; at += gap, gap = Math.max(0.025, gap * 0.9)) {
+      this.noiseBurst(this.master, t + at, "bandpass", 3200, 0.5, 0.018);
+    }
+
+    const whistle = ctx.createOscillator();
+    whistle.frequency.setValueAtTime(220, t);
+    whistle.frequency.exponentialRampToValueAtTime(1600, t + len);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 7;
+    const vibDepth = ctx.createGain();
+    vibDepth.gain.value = 12;
+    vib.connect(vibDepth).connect(whistle.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.6, t + 0.05);
+    g.gain.setValueAtTime(0.6, t + len - 0.15);
+    g.gain.linearRampToValueAtTime(0, t + len);
+    whistle.connect(g).connect(this.master);
+    whistle.start(t);
+    vib.start(t);
+    whistle.stop(t + len + 0.05);
+    vib.stop(t + len + 0.05);
+  }
+
   private noiseBurst(
     dest: AudioNode,
     t: number,

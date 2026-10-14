@@ -17,6 +17,34 @@ interface Bubble {
   speed: number;
 }
 
+/** A whale drifting by far in the background, just for looks. */
+interface Whale {
+  x: number;
+  y: number;
+  length: number;
+  dir: 1 | -1;
+  speed: number;
+  phase: number;
+}
+
+const WHALE_ALPHA = 0.14; // barely there, so it's clearly scenery and not something that can eat you
+const WHALE_FIRST = [15, 35]; // seconds before the first one shows up (min, max)
+const WHALE_GAP = [35, 75]; // seconds between one leaving and the next arriving
+
+/** A sea turtle paddling by in the background, also just for looks. */
+interface Turtle {
+  x: number;
+  y: number;
+  length: number;
+  dir: 1 | -1;
+  speed: number;
+  phase: number;
+}
+
+const TURTLE_ALPHA = 0.3; // closer than the whale, but still clearly scenery
+const TURTLE_FIRST = [10, 25];
+const TURTLE_GAP = [30, 60]; // after the last of a group has gone
+
 /** Small seeded PRNG so the layout stays the same between resizes and restarts. */
 function mulberry32(seed: number): () => number {
   return () => {
@@ -25,6 +53,10 @@ function mulberry32(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function between([min, max]: number[]): number {
+  return min + Math.random() * (max - min);
 }
 
 export class Scenery {
@@ -36,6 +68,10 @@ export class Scenery {
   private chest = { x: 0, y: 0, s: 1 };
   private chestBubbles: Bubble[] = [];
   private chestTimer = 0;
+  private whale: Whale | null = null;
+  private whaleTimer = between(WHALE_FIRST);
+  private turtles: Turtle[] = [];
+  private turtleTimer = between(TURTLE_FIRST);
 
   /** Sand surface height at x. */
   sandTop(x: number): number {
@@ -88,6 +124,63 @@ export class Scenery {
       b.x += Math.sin(b.y * 0.05) * 15 * dt;
       if (b.y < -10) this.chestBubbles.splice(i, 1);
     }
+    this.updateWhale(dt);
+    this.updateTurtles(dt);
+  }
+
+  private updateTurtles(dt: number): void {
+    if (!this.turtles.length) {
+      this.turtleTimer -= dt;
+      if (this.turtleTimer > 0) return;
+      // usually one, sometimes a little group swimming together
+      const count = Math.random() < 0.6 ? 1 : 2 + Math.floor(Math.random() * 2);
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const speed = 35 + Math.random() * 15;
+      const baseY = this.H * (0.2 + Math.random() * 0.4);
+      for (let i = 0; i < count; i++) {
+        const length = 150 + Math.random() * 90;
+        const lag = i * (length * 1.3 + Math.random() * 80); // followers trail behind
+        this.turtles.push({
+          x: dir === 1 ? -length - lag : this.W + length + lag,
+          y: baseY + (Math.random() - 0.5) * 120,
+          length,
+          dir,
+          speed,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      return;
+    }
+    for (const t of this.turtles) t.x += t.dir * t.speed * dt;
+    const gone = (t: Turtle) => (t.dir === 1 ? t.x > this.W + t.length : t.x < -t.length);
+    if (this.turtles.every(gone)) {
+      this.turtles = [];
+      this.turtleTimer = between(TURTLE_GAP);
+    }
+  }
+
+  private updateWhale(dt: number): void {
+    const w = this.whale;
+    if (!w) {
+      this.whaleTimer -= dt;
+      if (this.whaleTimer > 0) return;
+      const length = Math.max(this.W * 0.45, 360);
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      this.whale = {
+        x: dir === 1 ? -length * 0.6 : this.W + length * 0.6,
+        y: this.H * (0.22 + Math.random() * 0.25),
+        length,
+        dir,
+        speed: length / 18, // takes a good while to cross
+        phase: Math.random() * Math.PI * 2,
+      };
+      return;
+    }
+    w.x += w.dir * w.speed * dt;
+    if (w.x < -w.length * 0.7 || w.x > this.W + w.length * 0.7) {
+      this.whale = null;
+      this.whaleTimer = between(WHALE_GAP);
+    }
   }
 
   drawWater(ctx: CanvasRenderingContext2D): void {
@@ -102,6 +195,8 @@ export class Scenery {
   /** Everything behind the fish. */
   drawBack(ctx: CanvasRenderingContext2D, time: number): void {
     this.drawWater(ctx);
+    if (this.whale) this.drawWhale(ctx, this.whale, time);
+    for (const t of this.turtles) this.drawTurtle(ctx, t, time);
     for (const w of this.backWeeds) {
       this.weed(ctx, w, time, "rgba(40, 140, 120, 0.35)", null);
     }
@@ -121,6 +216,140 @@ export class Scenery {
   /** Seaweed that sits in front of the fish. */
   drawFront(ctx: CanvasRenderingContext2D, time: number): void {
     for (const w of this.frontWeeds) this.weed(ctx, w, time, "#1f9a35", "#0e6420");
+  }
+
+  /** Side-on sea turtle: domed shell, head, and front flippers that sweep like wings. */
+  private drawTurtle(ctx: CanvasRenderingContext2D, t: Turtle, time: number): void {
+    const L = t.length;
+    const stroke = time * 1.6 + t.phase; // flipper beat
+    ctx.save();
+    ctx.globalAlpha = TURTLE_ALPHA;
+    ctx.translate(t.x, t.y + Math.sin(stroke) * L * 0.04); // rises a little with each stroke
+    ctx.scale(t.dir, 1);
+
+    const skin = "#7d9a5c";
+    const flipper = (x: number, y: number, len: number, w: number, angle: number, color: string) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, -w * 0.5);
+      ctx.quadraticCurveTo(-len * 0.5, -w, -len, w * 0.2);
+      ctx.quadraticCurveTo(-len * 0.45, w * 0.6, 0, w * 0.5);
+      ctx.fill();
+      ctx.restore();
+    };
+
+    // far-side flippers, behind the shell and a shade darker
+    flipper(L * 0.2, L * 0.02, L * 0.42, L * 0.12, -0.55 - Math.sin(stroke + 0.6) * 0.5, "#5e7745");
+    flipper(-L * 0.3, L * 0.05, L * 0.16, L * 0.07, -0.4 - Math.sin(stroke + 2) * 0.2, "#5e7745");
+
+    // head and tail
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.ellipse(L * 0.5, -L * 0.01, L * 0.12, L * 0.075, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-L * 0.4, L * 0.02);
+    ctx.lineTo(-L * 0.52, L * 0.05);
+    ctx.lineTo(-L * 0.4, L * 0.08);
+    ctx.fill();
+    ctx.fillStyle = "#1d2a14";
+    ctx.beginPath();
+    ctx.arc(L * 0.55, -L * 0.03, L * 0.017, 0, Math.PI * 2);
+    ctx.fill();
+
+    // shell: a dome over a flat belly, with a few plates marked out
+    const shell = new Path2D();
+    shell.moveTo(-L * 0.42, L * 0.06);
+    shell.bezierCurveTo(-L * 0.32, -L * 0.3, L * 0.3, -L * 0.3, L * 0.42, L * 0.04);
+    shell.quadraticCurveTo(0, L * 0.14, -L * 0.42, L * 0.06);
+    ctx.fillStyle = "#4f6b34";
+    ctx.fill(shell);
+    ctx.save();
+    ctx.clip(shell);
+    ctx.strokeStyle = "#90ad6a";
+    ctx.lineWidth = Math.max(1, L * 0.015);
+    ctx.beginPath();
+    for (const px of [-0.18, 0.06]) {
+      ctx.moveTo(L * px, -L * 0.25);
+      ctx.lineTo(L * (px + 0.04), L * 0.1);
+    }
+    ctx.moveTo(-L * 0.4, -L * 0.05);
+    ctx.quadraticCurveTo(0, -L * 0.13, L * 0.4, -L * 0.05);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = "#3a5025";
+    ctx.lineWidth = Math.max(1, L * 0.012);
+    ctx.stroke(shell);
+
+    // near-side flippers, over the shell
+    flipper(L * 0.22, L * 0.06, L * 0.45, L * 0.13, -0.45 - Math.sin(stroke) * 0.55, skin);
+    flipper(-L * 0.3, L * 0.08, L * 0.17, L * 0.08, -0.35 - Math.sin(stroke + 1.4) * 0.2, skin);
+    ctx.restore();
+  }
+
+  /** Side-on whale silhouette: long body, flukes that beat up and down, a big flipper. */
+  private drawWhale(ctx: CanvasRenderingContext2D, w: Whale, time: number): void {
+    const L = w.length;
+    const beat = Math.sin(time * 0.9 + w.phase);
+    ctx.save();
+    ctx.globalAlpha = WHALE_ALPHA;
+    ctx.translate(w.x, w.y + Math.sin(time * 0.3 + w.phase) * 12);
+    ctx.scale(w.dir, 1);
+    ctx.rotate(beat * 0.025); // the whole body rocks a little with each tail beat
+    ctx.fillStyle = "#123a5a";
+
+    // flukes, pivoting on the tail stock
+    ctx.save();
+    ctx.translate(-L * 0.38, 0);
+    ctx.rotate(beat * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(L * 0.02, 0);
+    ctx.quadraticCurveTo(-L * 0.06, -L * 0.03, -L * 0.13, -L * 0.1);
+    ctx.quadraticCurveTo(-L * 0.1, -L * 0.02, -L * 0.07, 0);
+    ctx.quadraticCurveTo(-L * 0.1, L * 0.02, -L * 0.13, L * 0.1);
+    ctx.quadraticCurveTo(-L * 0.06, L * 0.03, L * 0.02, 0);
+    ctx.fill();
+    ctx.restore();
+
+    // body
+    ctx.beginPath();
+    ctx.moveTo(L * 0.5, L * 0.02);
+    ctx.bezierCurveTo(L * 0.45, -L * 0.1, L * 0.1, -L * 0.13, -L * 0.15, -L * 0.09);
+    ctx.quadraticCurveTo(-L * 0.3, -L * 0.05, -L * 0.39, -L * 0.018);
+    ctx.lineTo(-L * 0.39, L * 0.018);
+    ctx.quadraticCurveTo(-L * 0.25, L * 0.06, -L * 0.1, L * 0.1);
+    ctx.bezierCurveTo(L * 0.15, L * 0.14, L * 0.42, L * 0.1, L * 0.5, L * 0.02);
+    ctx.fill();
+
+    // small dorsal fin and a long flipper
+    ctx.beginPath();
+    ctx.moveTo(-L * 0.15, -L * 0.085);
+    ctx.quadraticCurveTo(-L * 0.19, -L * 0.115, -L * 0.23, -L * 0.115);
+    ctx.quadraticCurveTo(-L * 0.21, -L * 0.09, -L * 0.22, -L * 0.07);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(L * 0.2, L * 0.08);
+    ctx.quadraticCurveTo(L * 0.12, L * 0.2 + beat * L * 0.01, L * 0.0, L * 0.22);
+    ctx.quadraticCurveTo(L * 0.1, L * 0.14, L * 0.12, L * 0.1);
+    ctx.fill();
+
+    // throat grooves and eye, a shade lighter so they show through the silhouette
+    ctx.strokeStyle = "#3f7aa3";
+    ctx.lineWidth = Math.max(1, L * 0.004);
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      ctx.moveTo(L * 0.46, L * (0.045 + i * 0.012));
+      ctx.quadraticCurveTo(L * 0.3, L * (0.09 + i * 0.012), L * 0.12, L * (0.095 + i * 0.008));
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#3f7aa3";
+    ctx.beginPath();
+    ctx.arc(L * 0.33, L * 0.035, L * 0.008, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   private weed(ctx: CanvasRenderingContext2D, w: Weed, time: number, fill: string, stroke: string | null): void {

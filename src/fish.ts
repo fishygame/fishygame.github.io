@@ -1,5 +1,7 @@
 export type Kind = "fish" | "shark";
 
+const SHARK_FIN = "#56687a";
+
 export class Fish {
   x: number;
   y: number;
@@ -9,7 +11,13 @@ export class Fish {
   hue: number;
   kind: Kind;
   facing: 1 | -1 = 1;
+  skeleton = false; // what's left of the player after getting eaten
+  flip = 0; // 0 upright .. 1 belly-up; in between it's mid-roll
+  angle = 0; // tilt in radians, for hanging off a hook
   private phase = Math.random() * Math.PI * 2;
+  // The parts that don't animate, painted once and reused every frame (see cached())
+  private sprite: HTMLCanvasElement | null = null;
+  private spriteKey = "";
 
   constructor(x: number, y: number, vx: number, vy: number, r: number, hue: number, kind: Kind = "fish") {
     this.x = x;
@@ -42,13 +50,107 @@ export class Fish {
   draw(ctx: CanvasRenderingContext2D, time: number, danger = false): void {
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.scale(this.facing, 1);
-    if (this.kind === "shark") this.drawShark(ctx, time, danger);
+    ctx.rotate(this.angle);
+    ctx.scale(this.facing, Math.cos(Math.PI * this.flip));
+    if (this.skeleton) this.drawSkeleton(ctx);
+    else if (this.kind === "shark") this.drawShark(ctx, time, danger);
     else this.drawFish(ctx, time, danger);
     ctx.restore();
   }
 
+  /** Cartoon fish bones: skull with an X for an eye, spine, ribs and a fan of tail bones. */
+  private drawSkeleton(ctx: CanvasRenderingContext2D): void {
+    const L = this.r * 1.2;
+    const B = this.r * 0.62;
+    const bone = "#f3efe2";
+    const outline = "rgba(70, 60, 50, 0.85)";
+    const lw = Math.max(1.5, this.r * 0.09);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // spine, ribs and tail bones: drawn twice, a dark outline and then the bone on top
+    const bones = new Path2D();
+    bones.moveTo(L * 0.3, 0);
+    bones.lineTo(-L * 0.85, 0);
+    for (let i = 0; i < 5; i++) {
+      const x = L * 0.12 - i * L * 0.19;
+      const h = B * (0.78 - i * 0.1);
+      for (const s of [-1, 1]) {
+        bones.moveTo(x, 0);
+        bones.quadraticCurveTo(x + L * 0.04, s * h * 0.6, x - L * 0.07, s * h);
+      }
+    }
+    for (const y of [-0.9, -0.45, 0, 0.45, 0.9]) {
+      bones.moveTo(-L * 0.85, 0);
+      bones.lineTo(-L * 1.4, B * y);
+    }
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = lw + Math.max(1.5, this.r * 0.05);
+    ctx.stroke(bones);
+    ctx.strokeStyle = bone;
+    ctx.lineWidth = lw;
+    ctx.stroke(bones);
+
+    // skull
+    ctx.beginPath();
+    ctx.moveTo(L, B * 0.1);
+    ctx.bezierCurveTo(L * 0.85, -B * 0.85, L * 0.35, -B * 0.85, L * 0.25, -B * 0.1);
+    ctx.quadraticCurveTo(L * 0.3, B * 0.6, L * 0.55, B * 0.55);
+    ctx.quadraticCurveTo(L * 0.85, B * 0.5, L, B * 0.1);
+    ctx.fillStyle = bone;
+    ctx.fill();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = Math.max(1.5, this.r * 0.05);
+    ctx.stroke();
+
+    // X for an eye, and a jaw line
+    const ex = L * 0.6;
+    const ey = -B * 0.2;
+    const es = this.r * 0.13;
+    ctx.strokeStyle = "#2b2622";
+    ctx.lineWidth = Math.max(1.5, this.r * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(ex - es, ey - es);
+    ctx.lineTo(ex + es, ey + es);
+    ctx.moveTo(ex + es, ey - es);
+    ctx.lineTo(ex - es, ey + es);
+    ctx.moveTo(L * 0.97, B * 0.15);
+    ctx.lineTo(L * 0.7, B * 0.25);
+    ctx.stroke();
+  }
+
   // Shapes below are in local space: facing right, centered on (0, 0), scaled by r.
+
+  /**
+   * Draw the still parts of the fish from a cached image, repainting it only when the size,
+   * outline or screen resolution changes. Redrawing the gradients and scale pattern every frame
+   * gets slow once the fish are big and there are lots of them. `bounds` is the area `paint`
+   * covers, in the fish's local space.
+   */
+  private cached(
+    ctx: CanvasRenderingContext2D,
+    danger: boolean,
+    [x0, y0, x1, y1]: number[],
+    paint: (c: CanvasRenderingContext2D) => void,
+  ): void {
+    const t = ctx.getTransform();
+    const scale = Math.hypot(t.a, t.b); // screen pixels per unit, whichever way the fish faces
+    const pad = 8; // room for the outline
+    const w = x1 - x0 + pad * 2;
+    const h = y1 - y0 + pad * 2;
+    const key = `${this.r}|${danger}|${scale}`;
+    if (key !== this.spriteKey) {
+      const c = this.sprite ?? document.createElement("canvas");
+      c.width = Math.ceil(w * scale);
+      c.height = Math.ceil(h * scale);
+      const g = c.getContext("2d") as CanvasRenderingContext2D;
+      g.setTransform(scale, 0, 0, scale, (pad - x0) * scale, (pad - y0) * scale);
+      paint(g);
+      this.sprite = c;
+      this.spriteKey = key;
+    }
+    ctx.drawImage(this.sprite!, x0 - pad, y0 - pad, w, h);
+  }
 
   private drawFish(ctx: CanvasRenderingContext2D, time: number, danger: boolean): void {
     const h = this.hue;
@@ -56,12 +158,9 @@ export class Fish {
     const B = this.r * 0.62; // half-height of the body
     const wag = Math.sin(time * 8 + this.phase) * B * 0.25;
     const flap = Math.sin(time * 10 + this.phase);
-    const finColor = `hsl(${h} 70% 45% / 0.9)`;
-    const edge = danger ? "rgba(235, 50, 50, 0.95)" : `hsl(${h} 60% 25% / 0.8)`;
-    const lw = Math.max(1, this.r * 0.05);
 
     // forked tail
-    ctx.fillStyle = finColor;
+    ctx.fillStyle = `hsl(${h} 70% 45% / 0.9)`;
     ctx.beginPath();
     ctx.moveTo(-L * 0.75, 0);
     ctx.quadraticCurveTo(-L * 1.15, -B * 0.4 + wag * 0.5, -L * 1.5, -B * 1.0 + wag);
@@ -70,7 +169,27 @@ export class Fish {
     ctx.fill();
     this.finRays(ctx, -L * 0.8, 0, -L * 1.4, wag, B * 0.8, h);
 
+    this.cached(ctx, danger, [-L * 0.9, -B * 1.3, L * 1.02, B * 1.15], (c) => this.fishBodyParts(c, danger));
+
+    // pectoral fin, flapping
+    ctx.fillStyle = `hsl(${h} 75% 60% / 0.75)`;
+    ctx.beginPath();
+    ctx.moveTo(L * 0.25, B * 0.25);
+    ctx.quadraticCurveTo(-L * 0.05, B * (0.55 + flap * 0.15), -L * 0.15, B * (0.25 + flap * 0.2));
+    ctx.quadraticCurveTo(L * 0.05, B * 0.15, L * 0.25, B * 0.25);
+    ctx.fill();
+  }
+
+  /** Everything on a fish but the tail and the flapping pectoral fin. */
+  private fishBodyParts(ctx: CanvasRenderingContext2D, danger: boolean): void {
+    const h = this.hue;
+    const L = this.r * 1.2;
+    const B = this.r * 0.62;
+    const edge = danger ? "rgba(235, 50, 50, 0.95)" : `hsl(${h} 60% 25% / 0.8)`;
+    const lw = Math.max(1, this.r * 0.05);
+
     // dorsal and anal fins
+    ctx.fillStyle = `hsl(${h} 70% 45% / 0.9)`;
     ctx.beginPath();
     ctx.moveTo(L * 0.3, -B * 0.8);
     ctx.quadraticCurveTo(-L * 0.05, -B * 1.6, -L * 0.5, -B * 0.65);
@@ -99,14 +218,17 @@ export class Fish {
     ctx.strokeStyle = `hsl(${h} 60% 30% / 0.18)`;
     ctx.lineWidth = lw;
     const step = B * 0.32;
+    const a0 = -Math.PI / 2.5;
+    ctx.beginPath();
     for (let sx = -L * 0.6; sx < L * 0.3; sx += step) {
       for (let sy = -B; sy < B; sy += step) {
         const off = (Math.round((sx + L) / step) % 2) * step * 0.5;
-        ctx.beginPath();
-        ctx.arc(sx, sy + off, step * 0.55, -Math.PI / 2.5, Math.PI / 2.5);
-        ctx.stroke();
+        const [cx, cy, rr] = [sx, sy + off, step * 0.55];
+        ctx.moveTo(cx + rr * Math.cos(a0), cy + rr * Math.sin(a0));
+        ctx.arc(cx, cy, rr, a0, -a0);
       }
     }
+    ctx.stroke();
     // lateral line
     ctx.strokeStyle = `hsl(${h} 60% 30% / 0.3)`;
     ctx.beginPath();
@@ -121,14 +243,6 @@ export class Fish {
     ctx.beginPath();
     ctx.arc(L * 0.15, 0, B * 0.75, -Math.PI / 3.2, Math.PI / 3.2);
     ctx.stroke();
-
-    // pectoral fin, flapping
-    ctx.fillStyle = `hsl(${h} 75% 60% / 0.75)`;
-    ctx.beginPath();
-    ctx.moveTo(L * 0.25, B * 0.25);
-    ctx.quadraticCurveTo(-L * 0.05, B * (0.55 + flap * 0.15), -L * 0.15, B * (0.25 + flap * 0.2));
-    ctx.quadraticCurveTo(L * 0.05, B * 0.15, L * 0.25, B * 0.25);
-    ctx.fill();
 
     // mouth
     ctx.strokeStyle = `hsl(${h} 50% 20% / 0.8)`;
@@ -172,11 +286,9 @@ export class Fish {
     const L = this.r * 1.5;
     const B = this.r * 0.45;
     const wag = Math.sin(time * 5 + this.phase) * B * 0.3;
-    const fin = "#56687a";
-    const edge = danger ? "rgba(235, 50, 50, 0.95)" : "rgba(35, 45, 55, 0.8)";
 
     // crescent tail, upper lobe longer
-    ctx.fillStyle = fin;
+    ctx.fillStyle = SHARK_FIN;
     ctx.beginPath();
     ctx.moveTo(-L * 0.75, -B * 0.1);
     ctx.quadraticCurveTo(-L * 1.0, -B * 0.6, -L * 1.35, -B * 1.7 + wag);
@@ -186,7 +298,18 @@ export class Fish {
     ctx.closePath();
     ctx.fill();
 
+    this.cached(ctx, danger, [-L * 0.82, -B * 2.05, L * 1.02, B * 1.7], (c) => this.sharkBodyParts(c, danger));
+  }
+
+  /** Everything on a shark but the tail. */
+  private sharkBodyParts(ctx: CanvasRenderingContext2D, danger: boolean): void {
+    const L = this.r * 1.5;
+    const B = this.r * 0.45;
+    const fin = SHARK_FIN;
+    const edge = danger ? "rgba(235, 50, 50, 0.95)" : "rgba(35, 45, 55, 0.8)";
+
     // tall dorsal fin and small second dorsal
+    ctx.fillStyle = fin;
     ctx.beginPath();
     ctx.moveTo(L * 0.2, -B * 0.85);
     ctx.quadraticCurveTo(L * 0.05, -B * 1.6, -L * 0.1, -B * 2.0);

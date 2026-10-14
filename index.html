@@ -13,6 +13,42 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <!-- title screen; fish swim by behind it -->
+    <div id="menu" class="panel">
+      <h1>Fishy</h1>
+      <div class="screen" data-screen="main">
+        <button data-go="start">Start Game</button>
+        <button data-go="instructions">Instructions</button>
+        <button data-go="scores">High Scores</button>
+      </div>
+      <div class="screen" data-screen="instructions" hidden>
+        <h2>How to play</h2>
+        <ul>
+          <li>Eat fish smaller than you to grow. Bigger meals are worth more points.</li>
+          <li>Fish with a <b class="danger">red outline</b> are bigger than you. Touch one and you get eaten.</li>
+          <li>Sharks can't be eaten&hellip; until you're over halfway to winning. Then nothing can hurt you, and everything is food!</li>
+          <li>Watch out for fishing hooks! Bite one and you get reeled up out of the water&hellip; unless you're big enough to bite right through the line.</li>
+          <li>Grow until you nearly fill the screen to win.</li>
+          <li id="controls-help"></li>
+        </ul>
+        <button data-go="main">Back</button>
+      </div>
+      <div class="screen" data-screen="scores" hidden>
+        <h2>High scores</h2>
+        <ol id="menu-scores"></ol>
+        <button data-go="main">Back</button>
+      </div>
+    </div>
+    <!-- on the game-over screen, below the board -->
+    <button id="to-menu" hidden>Main menu</button>
+    <!-- shown over the game-over screen when a score makes the top 5 -->
+    <form id="hs-form" hidden>
+      <input id="hs-name" maxlength="8" autocomplete="off" autocapitalize="words"
+        spellcheck="false" placeholder="Your name" aria-label="Your name" />
+      <button type="submit">Save</button>
+      <button type="button" id="hs-skip">Skip</button>
+      <p id="hs-error"></p>
+    </form>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
