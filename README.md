@@ -18,6 +18,10 @@ as `big-fish-frenzy-itch.zip`, ready to upload. It keeps each player's best scor
 browser instead of the shared board. The two builds differ only in the settings in `.env` and
 `.env.itch`.
 
+`npm run deploy:itch` builds it and uploads `dist-itch/` to https://tclark333.itch.io/big-fish-frenzy
+with [butler](https://itch.io/docs/butler/), itch.io's upload tool, on the `html5` channel. It
+needs butler on the PATH, signed in once with `butler login`.
+
 Deploying pushes with the GitHub CLI's active account (`gh auth status`), which needs write access
 to the fishygame org.
 
