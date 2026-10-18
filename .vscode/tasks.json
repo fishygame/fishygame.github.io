@@ -1,0 +1,27 @@
+{
+  // Dev servers for the debug configs in launch.json. They keep running in the background after
+  // you stop debugging, so the next F5 starts quickly; stop them from the terminal panel.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "vite: Fishy",
+      "type": "shell",
+      "command": "npx vite --port 5173 --strictPort",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^never-matches$" },
+        "background": { "activelyMatches": true, "beginsPattern": "VITE", "endsPattern": "Local" }
+      }
+    },
+    {
+      "label": "vite: Big Fish Frenzy",
+      "type": "shell",
+      "command": "npx vite --mode itch --port 5174 --strictPort",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^never-matches$" },
+        "background": { "activelyMatches": true, "beginsPattern": "VITE", "endsPattern": "Local" }
+      }
+    }
+  ]
+}

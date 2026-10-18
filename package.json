@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:itch": "tsc && vite build --mode itch --outDir dist-itch && powershell -NoProfile -Command \"Compress-Archive -Path dist-itch/* -DestinationPath big-fish-frenzy-itch.zip -Force\"",
     "preview": "vite preview",
     "deploy": "npm run build && node deploy.js"
   },

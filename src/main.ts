@@ -3,7 +3,8 @@ import { Fish } from "./fish";
 import { Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { Hook } from "./hook";
-import { type Entry, fetchScores, qualifies, submitScore } from "./highscores";
+import { Crab } from "./crab";
+import { BOARD_TITLE, type Entry, LOCAL, NAME_MAX, fetchScores, qualifies, submitScore } from "./highscores";
 
 type State = "menu" | "playing" | "dead" | "won";
 
@@ -39,6 +40,7 @@ const FRENZY_MAX_FISH = 28;
 const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
+const CRAB_POINTS = 50; // for eating the crab in the frenzy
 const SHARK_CHANCE = 0.07; // sharks can't be eaten, whatever their size
 const DARTER_CHANCE = 0.6; // share of sharks that now and then cut back in a quick Z
 const PLAYER_SPEED_SMALL = 320; // top speed when you start out tiny...
@@ -60,6 +62,7 @@ let W = 0;
 let H = 0;
 const scenery = new Scenery();
 const hook = new Hook();
+const crab = new Crab();
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -73,6 +76,7 @@ function resize(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   scenery.resize(W, H, dpr);
   hook.resize(W, H);
+  crab.resize(W, H);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -149,7 +153,7 @@ window.addEventListener("keydown", (e) => {
   sound.start();
   // typing a name for the high score board
   if (e.target instanceof HTMLInputElement) {
-    if (e.code === "Escape") closeForm();
+    if (e.code === "Escape") skipForm();
     return;
   }
   if (e.code === "KeyM" && !e.repeat) sound.toggleMute();
@@ -219,10 +223,11 @@ let spawnTimer = 0;
 let endedAt = 0;
 let killer: Fish | null = null;
 let hooked = false; // caught on the fishing line, rather than eaten
+let pinched = false; // got by the crab
 let time = 0;
 
 function makePlayer(): Fish {
-  return new Fish(W / 2, H / 2, 0, 0, START_RADIUS, 40);
+  return new Fish(W / 2, H / 2, 0, 0, START_RADIUS, 26); // orange; much redder clashes with the danger outlines
 }
 
 function reset(): void {
@@ -233,7 +238,9 @@ function reset(): void {
   spawnTimer = 0;
   killer = null;
   hooked = false;
+  pinched = false;
   hook.reset();
+  crab.reset();
   myRank = -1;
   syncUI();
 }
@@ -269,6 +276,7 @@ function endGame(next: State): void {
 const menu = document.getElementById("menu") as HTMLDivElement;
 const menuScores = document.getElementById("menu-scores") as HTMLOListElement;
 const toMenu = document.getElementById("to-menu") as HTMLButtonElement;
+document.getElementById("scores-title")!.textContent = BOARD_TITLE;
 document.getElementById("controls-help")!.textContent = touchUI
   ? "Drag anywhere on the screen to swim. The buttons in the top-right corner pause and mute."
   : "Swim with the arrow keys or WASD. Space pauses, M mutes.";
@@ -312,7 +320,7 @@ function loadMenuScores(): void {
     .then((scores) => {
       board = scores;
       if (scores.length) renderMenuScores(scores);
-      else show("None yet. Be the first!");
+      else show(LOCAL ? "None yet. Go set one!" : "None yet. Be the first!");
     })
     .catch(() => {
       if (!board) show("Couldn't load the high scores");
@@ -357,7 +365,20 @@ const saveButton = form.querySelector("button[type=submit]") as HTMLButtonElemen
 let board: Entry[] | null = null; // null until it loads, or if it can't be reached
 let myRank = -1; // where the score you just saved landed, so it can be highlighted
 let entering = false;
-const NAME_KEY = "fishy-name";
+// the last name (or initials) typed, so next time it's already filled in
+const NAME_KEY = LOCAL ? "fishy-initials" : "fishy-name";
+const NO_INITIALS = "---"; // a local score saved without any
+
+nameInput.maxLength = NAME_MAX;
+if (LOCAL) {
+  // arcade-style initials: up to three capital letters
+  nameInput.placeholder = "ABC";
+  nameInput.setAttribute("aria-label", "Your initials");
+  nameInput.autocapitalize = "characters";
+  nameInput.addEventListener("input", () => {
+    nameInput.value = nameInput.value.toUpperCase().replace(/[^A-Z]/g, "");
+  });
+}
 
 fetchScores()
   .then((scores) => (board = scores))
@@ -389,6 +410,7 @@ form.addEventListener("submit", async (e) => {
   formError.textContent = "";
   try {
     const name = nameInput.value.trim();
+    if (LOCAL && !name) throw new Error("Type your initials, or Skip");
     const saved = await submitScore(name, score);
     board = saved.scores;
     myRank = saved.rank;
@@ -404,7 +426,19 @@ form.addEventListener("submit", async (e) => {
     saveButton.disabled = false;
   }
 });
-document.getElementById("hs-skip")!.addEventListener("click", closeForm);
+document.getElementById("hs-skip")!.addEventListener("click", skipForm);
+
+/** Skipping leaves a shared board alone, but your own board still keeps the score. */
+function skipForm(): void {
+  closeForm();
+  if (!LOCAL) return;
+  submitScore(NO_INITIALS, score)
+    .then((saved) => {
+      board = saved.scores;
+      myRank = saved.rank;
+    })
+    .catch((err) => console.warn(err));
+}
 
 // ---- spawning ----
 function spawnFish(): void {
@@ -481,6 +515,7 @@ function update(dt: number): void {
   time += dt;
   scenery.update(dt);
   hook.update(dt);
+  crab.update(dt);
 
   for (const b of bubbles) {
     b.y -= b.speed * dt;
@@ -567,6 +602,22 @@ function update(dt: number): void {
       hook.catchPlayer();
       sound.caught();
       hooked = true;
+      endGame("dead");
+      return;
+    }
+  }
+  // the crab on the sand: deadly too, unless you're big enough to eat it
+  const claws = crab.hitbox();
+  if (claws && overlaps(claws)) {
+    if (inFrenzy()) {
+      crab.eaten();
+      sound.burp(0.8);
+      score += CRAB_POINTS;
+    } else {
+      crab.pinch();
+      sound.eaten();
+      pinched = true;
+      player.skeleton = true;
       endGame("dead");
       return;
     }
@@ -792,6 +843,10 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
     player.draw(ctx, time);
     hook.draw(ctx, time);
   }
+  if (state === "dead" && pinched) {
+    crab.draw(ctx);
+    player.draw(ctx, time);
+  }
   // and show off how enormous you got
   if (state === "won") player.draw(ctx, time);
   ctx.save();
@@ -810,7 +865,7 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.font = "18px system-ui, sans-serif";
   if (showBoard && entering) {
     ctx.fillStyle = "#ffd166";
-    ctx.fillText("New high score! Type your name:", W / 2, top + 90);
+    ctx.fillText(LOCAL ? "Top 5 score! Type your initials:" : "New high score! Type your name:", W / 2, top + 90);
   } else {
     ctx.fillText(subtitle, W / 2, top + 90);
     if (showBoard) drawBoard(top + 140);
@@ -830,7 +885,10 @@ function drawBoard(y: number): void {
 
   ctx.font = "bold 18px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
-  ctx.fillText("High scores", W / 2, y);
+  let heading = BOARD_TITLE;
+  if (LOCAL && myRank === 0) heading = "New best score!";
+  else if (LOCAL && myRank > 0) heading = "You made your top 5!";
+  ctx.fillText(heading, W / 2, y);
   if (!board!.length) {
     ctx.fillStyle = "#fff";
     ctx.font = "18px system-ui, sans-serif";
@@ -857,6 +915,7 @@ function draw(): void {
     for (const f of fish) f.draw(ctx, time);
     hook.draw(ctx, time);
     scenery.drawFront(ctx, time);
+    crab.draw(ctx); // on the front of the sand, so in front of the seaweed too
     drawButtons();
     return;
   }
@@ -865,13 +924,14 @@ function draw(): void {
   player.draw(ctx, time);
   hook.draw(ctx, time);
   scenery.drawFront(ctx, time);
+  crab.draw(ctx); // on the front of the sand, so in front of the seaweed too
 
   drawHud();
 
   drawJoystick();
 
   const again = touchUI ? "Tap" : "Click or press Space";
-  if (state === "dead") drawOverlay(hooked ? "You got caught!" : "You got eaten!", `${again} to try again`, true);
+  if (state === "dead") drawOverlay(hooked ? "You got caught!" : pinched ? "You got pinched!" : "You got eaten!", `${again} to try again`, true);
   if (paused) drawOverlay("Paused", `${touchUI ? "Tap" : "Press Space"} to keep swimming`);
   if (state === "won") drawOverlay("You're the biggest fish!", `${again} to play again`, true);
 

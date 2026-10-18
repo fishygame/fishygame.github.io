@@ -13,6 +13,11 @@ npm run build    # typechecks and outputs a static site to dist/
 npm run deploy   # builds and publishes dist/ to the gh-pages branch (GitHub Pages)
 ```
 
+`npm run build:itch` builds the itch.io version, "Big Fish Frenzy", into `dist-itch/` and zips it
+as `big-fish-frenzy-itch.zip`, ready to upload. It keeps each player's best scores in their own
+browser instead of the shared board. The two builds differ only in the settings in `.env` and
+`.env.itch`.
+
 Deploying pushes with the GitHub CLI's active account (`gh auth status`), which needs write access
 to the fishygame org.
 

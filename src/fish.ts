@@ -414,8 +414,9 @@ export class Fish {
       ctx.fill();
     }
 
-    // small, mean eye
-    this.eye(ctx, L * 0.68, -B * 0.22, this.r * 0.08, "#000");
+    // small, mean eye; darters get wild red ones, so you can tell which might double back
+    if (this.darter) this.crazyEye(ctx, L * 0.66, -B * 0.25, Math.max(3, this.r * 0.15));
+    else this.eye(ctx, L * 0.68, -B * 0.22, this.r * 0.08, "#000");
     ctx.strokeStyle = "rgba(30, 40, 50, 0.9)";
     ctx.lineWidth = Math.max(1, this.r * 0.035);
     ctx.beginPath();
@@ -449,6 +450,34 @@ export class Fish {
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.beginPath();
     ctx.arc(x + size * 0.4, y - size * 0.3, size * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /** A bright red eye with a pinprick pupil and a few bloodshot veins. */
+  private crazyEye(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+    ctx.fillStyle = "#fff6e8";
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(220, 20, 20, 0.7)";
+    ctx.lineWidth = Math.max(0.5, size * 0.08);
+    ctx.beginPath();
+    for (const a of [0.6, 2.4, 3.6, 5.2]) {
+      ctx.moveTo(x + Math.cos(a) * size * 0.95, y + Math.sin(a) * size * 0.95);
+      ctx.lineTo(x + Math.cos(a + 0.2) * size * 0.6, y + Math.sin(a + 0.2) * size * 0.6);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#ff1a1a";
+    ctx.beginPath();
+    ctx.arc(x + size * 0.15, y, size * 0.68, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(x + size * 0.15, y, size * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.beginPath();
+    ctx.arc(x + size * 0.35, y - size * 0.25, size * 0.15, 0, Math.PI * 2);
     ctx.fill();
   }
 }

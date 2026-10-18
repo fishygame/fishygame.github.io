@@ -9,7 +9,7 @@
     <!-- run full screen when added to an iPad/iPhone home screen -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <title>Fishy</title>
+    <title>%VITE_TITLE%</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   </head>
@@ -17,7 +17,7 @@
     <canvas id="game"></canvas>
     <!-- title screen; fish swim by behind it -->
     <div id="menu" class="panel">
-      <h1>Fishy</h1>
+      <h1>%VITE_TITLE%</h1>
       <div class="screen" data-screen="main">
         <button data-go="start">Start Game</button>
         <button data-go="instructions">Instructions</button>
@@ -28,15 +28,16 @@
         <ul>
           <li>Eat fish smaller than you to grow. Bigger meals are worth more points.</li>
           <li>Fish with a <b class="danger">red outline</b> are bigger than you. Touch one and you get eaten.</li>
-          <li>Sharks can't be eaten, and some suddenly double back&hellip; until you're over halfway to winning. Then nothing can hurt you, and everything is food!</li>
+          <li>Sharks can't be eaten, and the ones with <b class="danger">red eyes</b> suddenly double back&hellip; until you're over halfway to winning. Then nothing can hurt you, and everything is food!</li>
           <li>Watch out for fishing hooks! Bite one and you get reeled up out of the water&hellip; unless you're big enough to bite right through the line.</li>
+          <li>And keep away from the crab on the sand. Its pinch is deadly&hellip; unless you're big enough to eat it.</li>
           <li>Grow until you nearly fill the screen to win.</li>
           <li id="controls-help"></li>
         </ul>
         <button data-go="main">Back</button>
       </div>
       <div class="screen" data-screen="scores" hidden>
-        <h2>High scores</h2>
+        <h2 id="scores-title">High scores</h2>
         <ol id="menu-scores"></ol>
         <button data-go="main">Back</button>
       </div>

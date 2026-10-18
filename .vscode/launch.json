@@ -1,0 +1,23 @@
+{
+  // The game runs in the browser, not Node: each config starts the Vite dev server (tasks.json)
+  // and opens Chrome with the debugger attached, so breakpoints in src/*.ts work.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Fishy (family site)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: Fishy"
+    },
+    {
+      "name": "Big Fish Frenzy (itch)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5174/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: Big Fish Frenzy"
+    }
+  ]
+}
