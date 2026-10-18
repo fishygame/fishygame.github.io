@@ -15,6 +15,11 @@ const START_RADIUS = 14;
 const TOP_FISH_SHARE = 0.55;
 const GROWTH = 0.15; // fraction of eaten fish's area added to the player
 const FRENZY_GROWTH = 0.09; // less in the frenzy, so the eat-everything part lasts longer
+// A fish is worth POINTS × (its size / yours)³. Growth goes by area, so big meals end the game in
+// fewer bites; cubing makes them worth it anyway, so going after big fish beats grazing on small
+// ones. Being relative to you also keeps scores about the same whatever the screen size.
+const POINTS = 500;
+const WIN_GLIDE = 3; // how quickly you glide to the middle and swell up after winning; higher is faster
 const MIN_FOOD = 6; // always at least this many fish you can eat around (outside the frenzy)
 const MAX_FISH = 18;
 // Once fish get big, 18 of them would pack the screen. Instead cap how much of the screen their
@@ -84,6 +89,11 @@ resize();
 /** You win once you nearly fill the screen. A fish is drawn about 3r long and 2r tall. */
 function winRadius(): number {
   return Math.max(START_RADIUS * 4, Math.min(W * 0.3, H * 0.55));
+}
+
+/** After winning you swell up to this, filling the sea edge to edge (fins can spill off). */
+function fillRadius(): number {
+  return Math.max(winRadius(), Math.min(W * 0.32, H * 0.6));
 }
 
 // ---- input ----
@@ -546,6 +556,15 @@ function update(dt: number): void {
       player.y = p.y;
       player.angle = -player.facing * Math.PI / 2;
     }
+    if (state === "won") {
+      // glide to the middle and swell up to fill the screen
+      const k = 1 - Math.exp(-WIN_GLIDE * dt);
+      player.x += (W / 2 - player.x) * k;
+      player.y += (H / 2 - player.y) * k;
+      // snap the last bit, so the fish's cached image stops being repainted at a new size every frame
+      const dr = fillRadius() - player.r;
+      player.r = Math.abs(dr) < 0.5 ? fillRadius() : player.r + dr * k;
+    }
     if (player.skeleton) {
       // roll belly-up, then float slowly toward the surface
       player.flip = Math.min(1, (time - endedAt) / SKELETON_FLIP_TIME);
@@ -634,8 +653,8 @@ function update(dt: number): void {
       if (!dangerous(f)) {
         // bigger meals and a bigger you both make for a deeper burp
         sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
+        score += Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
-        score += Math.round(f.r);
         fish.splice(i, 1);
         if (player.r >= winRadius()) {
           endGame("won");
@@ -861,7 +880,7 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.font = "bold 56px system-ui, sans-serif";
   ctx.fillText(title, W / 2, top);
   ctx.font = "24px system-ui, sans-serif";
-  ctx.fillText(`Score: ${score}`, W / 2, top + 50);
+  ctx.fillText(`Score: ${score.toLocaleString()}`, W / 2, top + 50);
   ctx.font = "18px system-ui, sans-serif";
   if (showBoard && entering) {
     ctx.fillStyle = "#ffd166";

@@ -2,7 +2,7 @@ Eat smaller fish, steer clear of bigger ones, and grow until you're the biggest 
 
 **How to play**
 
-- Eat fish smaller than you to grow. Bigger meals are worth more points.
+- Eat fish smaller than you to grow. The closer a fish is to your size, the more points it's worth.
 - Fish with a red outline are bigger than you. Touch one and you get eaten.
 - Sharks can't be eaten, and the red-eyed ones suddenly double back!
 - Watch out for fishing hooks. Bite one and you get reeled right out of the water.
