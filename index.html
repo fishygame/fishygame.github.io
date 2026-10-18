@@ -12,7 +12,7 @@
     <title>Fishy</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <script type="module" crossorigin src="./assets/index-Cob3N__4.js"></script>
+    <script type="module" crossorigin src="./assets/index-BM_dmSHd.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-CVgEnXF7.css">
   </head>
   <body>
@@ -30,15 +30,16 @@
         <ul>
           <li>Eat fish smaller than you to grow. Bigger meals are worth more points.</li>
           <li>Fish with a <b class="danger">red outline</b> are bigger than you. Touch one and you get eaten.</li>
-          <li>Sharks can't be eaten, and some suddenly double back&hellip; until you're over halfway to winning. Then nothing can hurt you, and everything is food!</li>
+          <li>Sharks can't be eaten, and the ones with <b class="danger">red eyes</b> suddenly double back&hellip; until you're over halfway to winning. Then nothing can hurt you, and everything is food!</li>
           <li>Watch out for fishing hooks! Bite one and you get reeled up out of the water&hellip; unless you're big enough to bite right through the line.</li>
+          <li>And keep away from the crab on the sand. Its pinch is deadly&hellip; unless you're big enough to eat it.</li>
           <li>Grow until you nearly fill the screen to win.</li>
           <li id="controls-help"></li>
         </ul>
         <button data-go="main">Back</button>
       </div>
       <div class="screen" data-screen="scores" hidden>
-        <h2>High scores</h2>
+        <h2 id="scores-title">High scores</h2>
         <ol id="menu-scores"></ol>
         <button data-go="main">Back</button>
       </div>
@@ -52,6 +53,6 @@
       <button type="submit">Save</button>
       <button type="button" id="hs-skip">Skip</button>
       <p id="hs-error"></p>
-    </form>
+    </form>
   </body>
 </html>
