@@ -88,6 +88,9 @@ function resize(): void {
   crab.resize(W, H);
 }
 window.addEventListener("resize", resize);
+// The browser can drop the canvas now and then (a graphics driver reset, say). It comes back blank
+// with its scaling gone, so set it all up again.
+canvas.addEventListener("contextrestored", resize);
 resize();
 
 /** You win once you nearly fill the screen. A fish is drawn about 3r long and 2r tall. */

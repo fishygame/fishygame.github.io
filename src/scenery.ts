@@ -62,6 +62,7 @@ function between([min, max]: number[]): number {
 export class Scenery {
   private W = 0;
   private H = 0;
+  private dpr = 1;
   private floor = document.createElement("canvas");
   private backWeeds: Weed[] = [];
   private frontWeeds: Weed[] = [];
@@ -78,9 +79,15 @@ export class Scenery {
     return this.H - SAND_HEIGHT + Math.sin(x * 0.008) * 10 + Math.sin(x * 0.021 + 1.3) * 5;
   }
 
+  constructor() {
+    // if the browser drops the floor's canvas (a graphics driver reset, say), it comes back blank
+    this.floor.addEventListener("contextrestored", () => this.resize(this.W, this.H, this.dpr));
+  }
+
   resize(W: number, H: number, dpr: number): void {
     this.W = W;
     this.H = H;
+    this.dpr = dpr;
     const rand = mulberry32(7);
     const s = Math.min(1, H / 800);
 

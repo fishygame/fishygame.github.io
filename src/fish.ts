@@ -175,7 +175,12 @@ export class Fish {
     const h = y1 - y0 + pad * 2;
     const key = `${this.r}|${danger}|${scale}`;
     if (key !== this.spriteKey) {
-      const c = this.sprite ?? document.createElement("canvas");
+      let c = this.sprite;
+      if (!c) {
+        c = document.createElement("canvas");
+        // the browser can drop it (a graphics driver reset, say), and it comes back blank
+        c.addEventListener("contextrestored", () => (this.spriteKey = ""));
+      }
       c.width = Math.ceil(w * scale);
       c.height = Math.ceil(h * scale);
       const g = c.getContext("2d") as CanvasRenderingContext2D;
