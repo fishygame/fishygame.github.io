@@ -159,6 +159,91 @@ canvas {
   opacity: 0.85;
 }
 
+/* sound: the eating sound, then the music, a row per song with a tick box to have it play and a
+   button to hear it */
+#menu h3 {
+  margin: 6px 0 0;
+  font-size: 17px;
+}
+
+#menu .music-help {
+  margin: 0;
+  font-size: 15px;
+  opacity: 0.85;
+}
+
+#menu #songs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#menu #songs li {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+
+#menu #songs button {
+  font-size: 17px;
+  padding: 8px 12px;
+}
+
+#menu #songs .song-on {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+#menu #songs .song-play {
+  flex: none;
+  width: 52px;
+}
+
+#menu #songs .song-on:hover,
+#menu #songs .song-on:focus-visible {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: #ffd166;
+  color: #fff;
+}
+
+#menu #songs .song-on[aria-pressed="false"] {
+  opacity: 0.6;
+}
+
+#menu #songs .box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  line-height: 1;
+}
+
+#menu #songs .song-on[aria-pressed="true"] .box {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #3a2a00;
+}
+
+#menu #songs li.playing .song-on {
+  border-color: #ffd166;
+}
+
+#menu #songs li.playing .song-play {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #3a2a00;
+}
+
 #to-menu {
   position: fixed;
   left: 50%;

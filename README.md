@@ -50,7 +50,10 @@ to the fishygame org.
   restarts.
 - A top-5 score asks for a name (up to 8 characters) for the global high score board. Each mode
   and difficulty has its own board.
-- M mutes all sound. The music starts on your first key press, click or tap.
+- M mutes all sound, and N (or the skip button in the corner) skips to the next song. The music
+  starts on your first key press, click or tap. The Sound screen on the title menu picks the eating
+  sound (a gulp, or the original burp) and which songs play, shuffled or in order, and plays any
+  of them to hear what it sounds like.
 
 ## Layout
 
@@ -61,18 +64,21 @@ to the fishygame org.
 - `src/crab.ts`: the crab that scuttles along the sand now and then
 - `src/scenery.ts`: the aquarium backdrop (water, sand, seaweed, castle, treasure chest, and
   the whale and sea turtles that swim by now and then)
-- `src/sound.ts`: background music and sound effects
+- `src/sound.ts`: background music (one song after another from the playlist) and sound effects
+- `src/music.ts`: the list of songs
 - `src/highscores.ts`: talks to the high score board
 - `server/high-scores.mjs`: the board itself, an AWS Lambda (see below)
-- `src/assets/music.mp3`: the background music ("Catchy and Funky 70's" by Plattenberg)
-- `src/assets/burp.mp3`: the eating sound ("belchy burp 1" by freesound_community)
+- `src/assets/music/`: the songs, all from Pixabay (Pixabay Content License), re-encoded at 128 kbps
+  and evened out to the same loudness (about -12 LUFS)
+- `src/assets/gulp.mp3` and `burp.mp3`: the eating sounds ("Gulp - Hard Swallow" by magnuswaker on
+  Freesound, CC0; "belchy burp 1" by freesound_community on Pixabay)
 
 ## Tweaks worth trying
 
 Constants at the top of `src/main.ts` control win size, growth rate, spawn rate, giant fish,
 fish colors, Speed mode scoring, and player speed/acceleration. What changes with difficulty
-(sharks, the crowded start, hook and crab timing, red outlines) is in `src/settings.ts`. To change the music, replace
-`src/assets/music.mp3` and update the loop points at the top of `src/sound.ts`. 
+(sharks, the crowded start, hook and crab timing, red outlines) is in `src/settings.ts`. To add a song, put the mp3 in
+`src/assets/music/` (128 kbps, about -12 LUFS) and add it to `src/music.ts`. 
 
 ## High scores
 

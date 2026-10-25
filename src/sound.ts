@@ -1,20 +1,34 @@
-// Background music and sound effects. The music and the burp are recorded clips in src/assets;
-// the getting-eaten sound is synthesized with the Web Audio API. Browsers only allow audio after
-// a user gesture, so call start() from a key or click handler.
+// Background music and sound effects. The songs (see music.ts) and the eating sounds are recorded
+// clips in src/assets; the getting-eaten sound is synthesized with the Web Audio API. Browsers only
+// allow audio after a user gesture, so call start() from a key or click handler.
 
 import burpUrl from "./assets/burp.mp3";
-import musicUrl from "./assets/music.mp3";
+import gulpUrl from "./assets/gulp.mp3";
+import { TRACKS } from "./music";
 
 const VOLUME = 0.16;
-const MUSIC_GAIN = 0.8; // the track is mastered loud; this keeps the burps easy to hear
+const MUSIC_GAIN = 0.8; // the songs are mastered loud; this keeps the eating sounds easy to hear
+const SONG_FADE = 0.3; // seconds to fade a song out when switching to another
 
-// The track has a moment of silence at the start and fades out at the end; loop just the music.
-const MUSIC_LOOP_START = 0.17;
-const MUSIC_LOOP_END = 212.2;
+/** Picked on the title menu. */
+export type EatSound = "gulp" | "burp";
 
-// The clip has ~0.19s of silence up front; skip it so the burp lands right on the bite.
-const BURP_OFFSET = 0.17;
-const BURP_GAIN = 6; // the clip is fairly quiet; this sits it just above the music
+// The eating sounds: where each starts in its clip (skipping silence up front), how long it lasts
+// (the gulp has a little click after the swallow), and a gain that sits it just above the music.
+const EAT_SOUNDS: Record<EatSound, { url: string; offset: number; length?: number; gain: number }> = {
+  gulp: { url: gulpUrl, offset: 0.15, length: 0.25, gain: 2 },
+  burp: { url: burpUrl, offset: 0.17, gain: 6 },
+};
+
+/** A copy of the list in random order. */
+function shuffled<T>(items: T[]): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 /** Fetch and decode an audio file. */
 async function loadClip(ctx: AudioContext, url: string): Promise<AudioBuffer> {
@@ -27,9 +41,21 @@ export class Sound {
   private master!: GainNode;
   private musicBus!: GainNode;
   private noise!: AudioBuffer;
-  private burpClip: AudioBuffer | null = null;
+  private eatClips: Partial<Record<EatSound, AudioBuffer>> = {};
+  eatSound: EatSound = "gulp";
   muted = false;
   private paused = false;
+  // Songs play one after another from the playlist. Only the one playing is decoded (a decoded
+  // song is ~70 MB); the next one is just downloaded ahead of time.
+  private playlist: string[] = TRACKS.map((t) => t.id); // ids of the songs switched on
+  private shuffle = true;
+  private bag: string[] = []; // shuffle: songs still to come before any repeats
+  private current: string | null = null; // the song playing, or loading to play
+  private song: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private fetched = new Map<string, Promise<ArrayBuffer>>();
+  private songId = 0; // bumped on every change of song, so a slow download can't start a stale one
+  /** Called when a different song starts (or the music stops, with null). */
+  onSongChange: ((id: string | null) => void) | null = null;
 
   start(): void {
     if (this.ctx) {
@@ -50,21 +76,111 @@ export class Sound {
     const data = this.noise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 
-    loadClip(ctx, burpUrl)
-      .then((clip) => (this.burpClip = clip))
-      .catch((err) => console.warn("couldn't load the burp sound", err));
+    for (const [kind, { url }] of Object.entries(EAT_SOUNDS) as [EatSound, { url: string }][]) {
+      loadClip(ctx, url)
+        .then((clip) => (this.eatClips[kind] = clip))
+        .catch((err) => console.warn(`couldn't load the ${kind} sound`, err));
+    }
 
-    loadClip(ctx, musicUrl)
-      .then((clip) => {
-        const src = ctx.createBufferSource();
-        src.buffer = clip;
-        src.loop = true;
-        src.loopStart = MUSIC_LOOP_START;
-        src.loopEnd = Math.min(MUSIC_LOOP_END, clip.duration);
-        src.connect(this.musicBus);
-        src.start(ctx.currentTime, MUSIC_LOOP_START);
+    this.playSong(this.songAfter(null));
+  }
+
+  // ---- music ----
+
+  /** Which songs can play (ids), and whether in random order or the order of TRACKS. */
+  setPlaylist(ids: string[], shuffle: boolean): void {
+    this.playlist = TRACKS.map((t) => t.id).filter((id) => ids.includes(id));
+    if (shuffle !== this.shuffle) this.bag = [];
+    this.shuffle = shuffle;
+    if (!this.ctx) return;
+    // the song playing was just switched off, or one was switched on after silence
+    if (this.current ? !this.playlist.includes(this.current) : this.playlist.length) this.nextSong();
+    else this.fetchNext();
+  }
+
+  /** Skip to the next song. */
+  nextSong(): void {
+    if (this.ctx) this.playSong(this.songAfter(this.current));
+  }
+
+  /** Play this song from the start, fading out the one playing (null: stop the music). */
+  playSong(id: string | null): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const songId = ++this.songId;
+    this.stopSong();
+    this.current = id;
+    this.onSongChange?.(id);
+    if (!id) return;
+    this.bag = this.bag.filter((x) => x !== id);
+    this.fetchSong(id)
+      .then((bytes) => {
+        this.fetched.delete(id); // decoding uses the bytes up
+        return ctx.decodeAudioData(bytes);
       })
-      .catch((err) => console.warn("couldn't load the music", err));
+      .then((buffer) => {
+        if (songId !== this.songId) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        const gain = ctx.createGain();
+        src.connect(gain).connect(this.musicBus);
+        src.onended = () => {
+          if (this.song?.src === src) this.nextSong();
+        };
+        src.start();
+        this.song = { src, gain };
+        this.fetchNext();
+      })
+      .catch((err) => console.warn(`couldn't play the song ${id}`, err));
+  }
+
+  private stopSong(): void {
+    const song = this.song;
+    if (!song) return;
+    this.song = null;
+    const t = this.ctx!.currentTime;
+    song.gain.gain.setTargetAtTime(0, t, SONG_FADE / 4);
+    song.src.stop(t + SONG_FADE);
+  }
+
+  /** The song to play after `id`. With only one song on, that's the same one again. */
+  private songAfter(id: string | null): string | null {
+    const list = this.playlist;
+    if (!list.length) return null;
+    if (this.shuffle) {
+      this.bag = this.bag.filter((x) => list.includes(x) && x !== id);
+      if (!this.bag.length) this.bag = shuffled(list.filter((x) => x !== id));
+      return this.bag[0] ?? id;
+    }
+    // in order: the next song that's on, after this one in the full list, wrapping around
+    const all = TRACKS.map((t) => t.id);
+    const i = id ? all.indexOf(id) : -1;
+    for (let k = 1; k <= all.length; k++) {
+      const next = all[(i + k) % all.length];
+      if (list.includes(next)) return next;
+    }
+    return null;
+  }
+
+  /** Download the song that's up next, so it starts straight away; forget any others. */
+  private fetchNext(): void {
+    const next = this.songAfter(this.current);
+    for (const id of this.fetched.keys()) if (id !== next) this.fetched.delete(id);
+    if (next) this.fetchSong(next).catch(() => {}); // it'll be tried again when it's due
+  }
+
+  private fetchSong(id: string): Promise<ArrayBuffer> {
+    let bytes = this.fetched.get(id);
+    if (!bytes) {
+      const url = TRACKS.find((t) => t.id === id)!.url;
+      bytes = fetch(url).then((res) => {
+        if (!res.ok) throw new Error(`${res.status}`);
+        return res.arrayBuffer();
+      });
+      bytes.catch(() => this.fetched.delete(id));
+      this.fetched.set(id, bytes);
+    }
+    return bytes;
   }
 
   toggleMute(): void {
@@ -84,17 +200,19 @@ export class Sound {
 
   // ---- sound effects ----
 
-  /** Play the burp clip. `size` 0..1: bigger meals play it slower, so it's deeper and longer. */
-  burp(size: number): void {
+  /** Play the eating sound. `size` 0..1: bigger meals play it slower, so it's deeper and longer. */
+  eat(size: number): void {
     const ctx = this.ctx;
-    if (!ctx || !this.burpClip) return;
+    const clip = this.eatClips[this.eatSound];
+    if (!ctx || !clip) return;
+    const { offset, length, gain } = EAT_SOUNDS[this.eatSound];
     const src = ctx.createBufferSource();
-    src.buffer = this.burpClip;
+    src.buffer = clip;
     src.playbackRate.value = (1.2 - 0.45 * size) * (0.95 + Math.random() * 0.1);
     const g = ctx.createGain();
-    g.gain.value = BURP_GAIN;
+    g.gain.value = gain;
     src.connect(g).connect(this.master);
-    src.start(ctx.currentTime, BURP_OFFSET);
+    src.start(ctx.currentTime, offset, length);
   }
 
   /** Cartoon defeat: CHOMP, a slide whistle falling away, then a few sad bubbles. */

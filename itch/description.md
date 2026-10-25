@@ -14,12 +14,14 @@ Eat smaller fish, steer clear of bigger ones, and grow until you're the biggest 
 
 **Controls**
 
-- Keyboard: arrow keys or WASD to swim, Space to pause, M to mute.
-- Touch: drag anywhere to swim. Buttons in the corner pause and mute.
+- Keyboard: arrow keys or WASD to swim, Space to pause, N for the next song, M to mute.
+- Touch: drag anywhere to swim. Buttons in the corner pause, skip the song and mute.
+- Pick your songs, shuffled or in order, and gulp or burp, on the Sound screen.
 
 Your five best scores for each mode and difficulty are saved in your browser with your initials, so you're always chasing your own record.
 
 **Credits**
 
 - Music: "Catchy and Funky 70's" by Plattenberg (Pixabay)
+- Gulp: "Gulp - Hard Swallow" by magnuswaker (Freesound, CC0)
 - Burp: "belchy burp 1" by freesound_community (Pixabay)

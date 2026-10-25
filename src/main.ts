@@ -1,10 +1,11 @@
 import "./style.css";
 import { Fish } from "./fish";
-import { Sound } from "./sound";
+import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { Hook } from "./hook";
 import { Crab } from "./crab";
 import { BOARD_TITLE, type Entry, LOCAL, NAME_MAX, fetchScores, qualifies, submitScore } from "./highscores";
+import { TRACKS } from "./music";
 import { BLURB, DIFFICULTIES, DIFFICULTY, type Difficulty, LABEL, MODES, type Mode } from "./settings";
 
 type State = "menu" | "playing" | "dead" | "won";
@@ -111,16 +112,19 @@ const touchUI = window.matchMedia("(pointer: coarse)").matches;
 // Touch (or mouse-drag) joystick: wherever a finger lands becomes the stick's center.
 const joy = { id: null as number | null, ox: 0, oy: 0, x: 0, y: 0 };
 
-type Button = "pause" | "mute";
+type Button = "pause" | "next" | "mute";
+const BUTTONS: Button[] = ["pause", "next", "mute"];
 
+/** In a row in the top-right corner: pause (only while playing), next song, mute. */
 function buttonPos(b: Button): { x: number; y: number } {
   const y = 16 + BUTTON_R;
   const muteX = W - 16 - BUTTON_R;
-  return b === "mute" ? { x: muteX, y } : { x: muteX - BUTTON_R * 2 - 12, y };
+  const step = BUTTON_R * 2 + 12;
+  return { x: muteX - step * (b === "mute" ? 0 : b === "next" ? 1 : 2), y };
 }
 
 function buttonAt(x: number, y: number): Button | null {
-  for (const b of ["pause", "mute"] as const) {
+  for (const b of BUTTONS) {
     if (b === "pause" && state !== "playing") continue;
     const p = buttonPos(b);
     if (Math.hypot(x - p.x, y - p.y) < BUTTON_R + 8) return b;
@@ -133,6 +137,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const button = buttonAt(e.clientX, e.clientY);
   if (button === "pause") return setPaused(!paused);
   if (button === "mute") return sound.toggleMute();
+  if (button === "next") return sound.nextSong();
   if (paused) return setPaused(false);
   if (gameOver()) return tryRestart();
   if (state === "menu") return;
@@ -174,6 +179,7 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.code === "KeyM" && !e.repeat) sound.toggleMute();
+  if (e.code === "KeyN" && !e.repeat) sound.nextSong();
   // the menu's buttons handle Enter and Space themselves; arrows move between them
   if (state === "menu") {
     if (e.code === "ArrowDown" || e.code === "ArrowUp") {
@@ -333,8 +339,8 @@ const menuScores = document.getElementById("menu-scores") as HTMLOListElement;
 const toMenu = document.getElementById("to-menu") as HTMLButtonElement;
 document.getElementById("scores-title")!.textContent = BOARD_TITLE;
 document.getElementById("controls-help")!.textContent = touchUI
-  ? "Drag anywhere on the screen to swim. The buttons in the top-right corner pause and mute."
-  : "Swim with the arrow keys or WASD. Space pauses, M mutes.";
+  ? "Drag anywhere on the screen to swim. The buttons in the top-right corner pause, skip to the next song and mute."
+  : "Swim with the arrow keys or WASD. Space pauses, N skips to the next song, M mutes.";
 
 /** Show the right HTML on top of the game for the current state. */
 function syncUI(): void {
@@ -374,11 +380,98 @@ function pick(kind: string, value: string): void {
 /** Light up what's picked (there's a set of choices on the main and high score screens). */
 function syncPicks(): void {
   for (const b of menu.querySelectorAll<HTMLButtonElement>(".pick button")) {
-    const picked = b.parentElement!.dataset.pick === "mode" ? mode : difficulty;
+    const kind = b.parentElement!.dataset.pick;
+    const picked =
+      kind === "mode"
+        ? mode
+        : kind === "difficulty"
+          ? difficulty
+          : kind === "eat"
+            ? sound.eatSound
+            : shuffle
+              ? "on"
+              : "off";
     b.setAttribute("aria-pressed", String(b.dataset.value === picked));
   }
   menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
 }
+
+// ---- sound choices ----
+sound.eatSound = loadChoice<EatSound>("fishy-eat-sound", ["gulp", "burp"], "gulp");
+
+/** Pick the eating sound, and play it so you hear what you picked. */
+function pickEatSound(value: string): void {
+  if (value !== "gulp" && value !== "burp") return;
+  sound.eatSound = value;
+  try {
+    localStorage.setItem("fishy-eat-sound", value);
+  } catch {
+    // not remembering it is fine
+  }
+  syncPicks();
+  sound.eat(0.4);
+}
+
+// Remembered as the songs switched off, so any songs added later start out on.
+const MUSIC_KEY = "fishy-music";
+let songsOff: string[] = [];
+let shuffle = true;
+try {
+  const saved = JSON.parse(localStorage.getItem(MUSIC_KEY) ?? "{}");
+  if (Array.isArray(saved.off)) songsOff = saved.off;
+  if (typeof saved.shuffle === "boolean") shuffle = saved.shuffle;
+} catch {
+  // storage blocked or garbled: all songs, shuffled
+}
+const songList = document.getElementById("songs") as HTMLUListElement;
+let playingSong: string | null = null;
+
+function applyMusic(): void {
+  try {
+    localStorage.setItem(MUSIC_KEY, JSON.stringify({ off: songsOff, shuffle }));
+  } catch {
+    // not remembering it is fine
+  }
+  sound.setPlaylist(TRACKS.filter((t) => !songsOff.includes(t.id)).map((t) => t.id), shuffle);
+  syncPicks();
+  renderSongs();
+}
+
+/** One row per song: a tick box to have it play or not, and a button to hear it now. */
+function renderSongs(): void {
+  // rebuilding the rows loses keyboard focus, so put it back where it was
+  const was = (document.activeElement as HTMLElement | null)?.dataset;
+  const refocus = was?.song ? `[data-song="${was.song}"]` : was?.play ? `[data-play="${was.play}"]` : "";
+  songList.innerHTML = "";
+  for (const t of TRACKS) {
+    const on = !songsOff.includes(t.id);
+    const li = document.createElement("li");
+    li.classList.toggle("playing", t.id === playingSong);
+    const toggle = document.createElement("button");
+    toggle.className = "song-on";
+    toggle.dataset.song = t.id;
+    toggle.setAttribute("aria-pressed", String(on));
+    const box = document.createElement("span");
+    box.className = "box";
+    box.textContent = on ? "\u2713" : "";
+    const name = document.createElement("span");
+    name.textContent = t.name;
+    toggle.append(box, name);
+    const play = document.createElement("button");
+    play.className = "song-play";
+    play.dataset.play = t.id;
+    play.textContent = t.id === playingSong ? "\u266A" : "\u25B6";
+    play.setAttribute("aria-label", `Play ${t.name}`);
+    li.append(toggle, play);
+    songList.append(li);
+  }
+  if (refocus) songList.querySelector<HTMLButtonElement>(refocus)?.focus();
+}
+
+sound.onSongChange = (id) => {
+  playingSong = id;
+  renderSongs();
+};
 
 /** "Speed · Hard", say. */
 function boardName(): string {
@@ -447,7 +540,17 @@ menu.addEventListener("click", (e) => {
   if (!button) return;
   sound.start(); // a click is the gesture browsers want before they'll play audio
   const go = button.dataset.go;
-  if (button.dataset.value) pick(button.parentElement!.dataset.pick!, button.dataset.value);
+  const kind = button.parentElement!.dataset.pick;
+  if (button.dataset.song) {
+    const id = button.dataset.song;
+    songsOff = songsOff.includes(id) ? songsOff.filter((x) => x !== id) : [...songsOff, id];
+    applyMusic();
+  } else if (button.dataset.play) sound.playSong(button.dataset.play);
+  else if (kind === "eat") pickEatSound(button.dataset.value!);
+  else if (kind === "shuffle") {
+    shuffle = button.dataset.value === "on";
+    applyMusic();
+  } else if (button.dataset.value) pick(kind!, button.dataset.value);
   else if (go === "start") {
     (document.activeElement as HTMLElement | null)?.blur();
     reset();
@@ -459,7 +562,7 @@ toMenu.addEventListener("click", () => {
   showMenu();
 });
 
-syncPicks();
+applyMusic();
 showScreen("main");
 
 // ---- high scores ----
@@ -720,7 +823,7 @@ function update(dt: number): void {
   if (bait && overlaps({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius })) {
     if (inFrenzy()) {
       hook.snap();
-      sound.burp(0.7);
+      sound.eat(0.7);
     } else {
       hook.catchPlayer();
       sound.caught();
@@ -734,7 +837,7 @@ function update(dt: number): void {
   if (claws && overlaps(claws)) {
     if (inFrenzy()) {
       crab.eaten();
-      sound.burp(0.8);
+      sound.eat(0.8);
       score += bitePoints(CRAB_POINTS);
     } else {
       crab.pinch();
@@ -755,8 +858,8 @@ function update(dt: number): void {
 
     if (touching(f)) {
       if (!dangerous(f)) {
-        // bigger meals and a bigger you both make for a deeper burp
-        sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
+        // bigger meals and a bigger you both make for a deeper gulp (or burp)
+        sound.eat(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
         score += bitePoints(Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3)));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
         fish.splice(i, 1);
@@ -894,7 +997,7 @@ function drawHud(): void {
   const mute = sound.muted ? "unmute" : "mute";
   const hint = touchUI
     ? "Drag anywhere to swim"
-    : `Arrows / WASD to swim · Space to pause · M to ${mute}`;
+    : `Arrows / WASD to swim · Space to pause · N for the next song · M to ${mute}`;
   ctx.fillText(hint, 16, speed ? 72 : 66);
   ctx.restore();
 }
@@ -922,7 +1025,7 @@ function drawJoystick(): void {
 }
 
 function drawButtons(): void {
-  for (const b of ["pause", "mute"] as const) {
+  for (const b of BUTTONS) {
     if (b === "pause" && state !== "playing") continue;
     const { x, y } = buttonPos(b);
     ctx.fillStyle = "rgba(0, 30, 60, 0.35)";
@@ -944,6 +1047,15 @@ function drawButtons(): void {
     } else if (b === "pause") {
       ctx.fillRect(x - 7, y - 9, 5, 18);
       ctx.fillRect(x + 2, y - 9, 5, 18);
+    } else if (b === "next") {
+      // skip: a play triangle up against a bar
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y - 9);
+      ctx.lineTo(x + 5, y);
+      ctx.lineTo(x - 8, y + 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(x + 5, y - 9, 3.5, 18);
     } else {
       // speaker, with sound waves or a cross
       ctx.beginPath();
