@@ -12,8 +12,8 @@
     <title>Fishy</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <script type="module" crossorigin src="./assets/index-C5eWcLe9.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-RKkXKr5E.css">
+    <script type="module" crossorigin src="./assets/index-DRFfbbFT.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BAGi7GQ5.css">
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -34,6 +34,23 @@
         <button data-go="start">Start Game</button>
         <button data-go="instructions">Instructions</button>
         <button data-go="scores">High Scores</button>
+        <button data-go="sound">Sound</button>
+      </div>
+      <div class="screen" data-screen="sound" hidden>
+        <h2>Sound</h2>
+        <h3>Eating sound</h3>
+        <div class="pick" data-pick="eat" role="group" aria-label="Eating sound">
+          <button data-value="gulp">Gulp</button>
+          <button data-value="burp">Burp</button>
+        </div>
+        <h3>Music</h3>
+        <div class="pick" data-pick="shuffle" role="group" aria-label="Song order">
+          <button data-value="on">Shuffle</button>
+          <button data-value="off">In order</button>
+        </div>
+        <p class="music-help">Tick the songs you want, and press &#9654; to hear one.</p>
+        <ul id="songs"></ul>
+        <button data-go="main">Back</button>
       </div>
       <div class="screen" data-screen="instructions" hidden>
         <h2>How to play</h2>
