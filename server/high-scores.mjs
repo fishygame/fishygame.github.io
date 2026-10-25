@@ -1,7 +1,11 @@
-// High score board for Fishy: an AWS Lambda behind a function URL, storing the top 5 in DynamoDB.
-//   GET  -> { scores: [{ name, score }] }
-//   POST { name, score } -> { scores, rank } (rank is the new entry's index, or -1 if it missed out)
-// Names are checked here, not in the game, so the filter can't be skipped by editing the page.
+// High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 5 of each game
+// mode and difficulty in DynamoDB.
+//   GET  ?mode=&difficulty= -> { scores: [{ name, score }] }
+//   POST { name, score, mode, difficulty } -> { scores, rank } (rank is the new entry's index, or -1
+//        if it missed out)
+// Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
+// the page still work. Names are checked here, not in the game, so the filter can't be skipped by
+// editing the page.
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
@@ -13,6 +17,8 @@ const TOP = 5;
 const NAME_MAX = 8;
 const MAX_SCORE = 1_000_000; // far beyond a real game; anything bigger is someone poking the API
 const COOLDOWN = 10; // seconds between submissions from the same IP
+const MODES = ["classic", "speed"];
+const DIFFICULTIES = ["easy", "medium", "hard"];
 
 // Matched anywhere in the name, after undoing l33t-speak and repeated letters.
 const BLOCKED_ANYWHERE = [
@@ -51,9 +57,16 @@ function json(statusCode, body) {
   return { statusCode, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }
 
-async function getBoard() {
-  const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk: "board" } }));
-  return Item ?? { pk: "board", scores: [], version: 0 };
+/** The board's key, or null for a mode or difficulty that doesn't exist. Classic on Medium keeps
+ * the original board's key, so its scores carried over. */
+function boardKey(mode = "classic", difficulty = "medium") {
+  if (!MODES.includes(mode) || !DIFFICULTIES.includes(difficulty)) return null;
+  return mode === "classic" && difficulty === "medium" ? "board" : `board#${mode}#${difficulty}`;
+}
+
+async function getBoard(pk) {
+  const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk } }));
+  return Item ?? { pk, scores: [], version: 0 };
 }
 
 /** Rate limit per IP: claims a short-lived marker row, or returns false if one is still live. */
@@ -83,6 +96,8 @@ async function submit(event) {
   } catch {
     return json(400, { error: "Bad request" });
   }
+  const pk = boardKey(body.mode, body.difficulty);
+  if (!pk) return json(400, { error: "Bad game mode" });
   const name = cleanName(body.name);
   const score = body.score;
   if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) return json(400, { error: "Bad score" });
@@ -94,7 +109,7 @@ async function submit(event) {
 
   // read-modify-write with a version check, retrying if two scores land at once
   for (let attempt = 0; attempt < 5; attempt++) {
-    const board = await getBoard();
+    const board = await getBoard(pk);
     const entry = { name, score, at: new Date().toISOString() };
     // ties go to whoever got there first
     const scores = [...board.scores, entry].sort((a, b) => b.score - a.score).slice(0, TOP);
@@ -104,7 +119,7 @@ async function submit(event) {
       await db.send(
         new PutCommand({
           TableName: TABLE,
-          Item: { pk: "board", scores, version: board.version + 1 },
+          Item: { pk, scores, version: board.version + 1 },
           ConditionExpression: "attribute_not_exists(pk) OR version = :v",
           ExpressionAttributeValues: { ":v": board.version },
         }),
@@ -123,7 +138,12 @@ function publicEntry({ name, score }) {
 
 export const handler = async (event) => {
   const method = event.requestContext?.http?.method;
-  if (method === "GET") return json(200, { scores: (await getBoard()).scores.map(publicEntry) });
+  if (method === "GET") {
+    const query = event.queryStringParameters ?? {};
+    const pk = boardKey(query.mode, query.difficulty);
+    if (!pk) return json(400, { error: "Bad game mode" });
+    return json(200, { scores: (await getBoard(pk)).scores.map(publicEntry) });
+  }
   if (method === "POST") return submit(event);
   return json(405, { error: "Method not allowed" });
 };

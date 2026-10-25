@@ -3,9 +3,10 @@
 // dangled a while, it waits for some other fish to take the bait and reels that one in instead.
 
 import type { Fish } from "./fish";
+import type { Timing } from "./settings";
 
-const FIRST = [15, 30]; // seconds before the first one drops (min, max)
-const GAP = [25, 45]; // seconds between one leaving and the next dropping
+/** On Medium; settings.ts has the others. Gap is from one leaving to the next dropping. */
+export const HOOK_TIMING: Timing = { first: [15, 30], gap: [25, 45] };
 const WAIT = [6, 12]; // how long it dangles before it starts waiting for a bite
 const LURK_MAX = 12; // then how long it waits for some other fish before giving up
 const CATCH_RADIUS = [15, 90]; // smaller fish wouldn't show on the hook; bigger are too much for it
@@ -24,7 +25,8 @@ export class Hook {
   private y = 0; // the hook's eye
   private depth = 0; // where it stops on the way down
   private phase: "idle" | "drop" | "wait" | "reel" = "idle";
-  private timer = between(FIRST); // idle: until it drops; wait: until reeled; reel: time reeling
+  private timing = HOOK_TIMING;
+  private timer = between(HOOK_TIMING.first); // idle: until it drops; wait: until reeled; reel: time reeling
   private seed = 0;
   private snapped = false; // bitten off: the line goes up empty
   private lurking = false; // waited long enough; now hoping another fish bites
@@ -37,9 +39,10 @@ export class Hook {
   }
 
   /** Start over with nothing in the water. */
-  reset(): void {
+  reset(timing = HOOK_TIMING): void {
+    this.timing = timing;
     this.phase = "idle";
-    this.timer = between(FIRST);
+    this.timer = between(timing.first);
     this.caught = false;
     this.catch = null;
   }
@@ -75,7 +78,7 @@ export class Hook {
       this.y -= Math.min(REEL_SPEED, 40 + this.timer * 300) * dt;
       if (this.y < -this.H) {
         this.phase = "idle";
-        this.timer = between(GAP);
+        this.timer = between(this.timing.gap);
         this.catch = null;
       }
     }

@@ -5,6 +5,7 @@ import { SAND_HEIGHT, Scenery } from "./scenery";
 import { Hook } from "./hook";
 import { Crab } from "./crab";
 import { BOARD_TITLE, type Entry, LOCAL, NAME_MAX, fetchScores, qualifies, submitScore } from "./highscores";
+import { BLURB, DIFFICULTIES, DIFFICULTY, type Difficulty, LABEL, MODES, type Mode } from "./settings";
 
 type State = "menu" | "playing" | "dead" | "won";
 
@@ -19,6 +20,13 @@ const FRENZY_GROWTH = 0.09; // less in the frenzy, so the eat-everything part la
 // fewer bites; cubing makes them worth it anyway, so going after big fish beats grazing on small
 // ones. Being relative to you also keeps scores about the same whatever the screen size.
 const POINTS = 500;
+// Speed mode instead scores every fish the same, times a combo that grows with each bite taken
+// within COMBO_WINDOW seconds of the last one. Winning before SPEED_PAR earns a time bonus too.
+const SPEED_POINTS = 100;
+const COMBO_WINDOW = 2;
+const COMBO_MAX = 10;
+const SPEED_PAR = 300; // seconds
+const TIME_BONUS = 100; // points per second under par
 const WIN_GLIDE = 3; // how quickly you glide to the middle and swell up after winning; higher is faster
 const MIN_FOOD = 6; // always at least this many fish you can eat around (outside the frenzy)
 const MAX_FISH = 18;
@@ -30,24 +38,20 @@ const SPAWN_INTERVAL = 0.45; // seconds between spawn attempts
 const FOOD_SHARE = 0.65; // share of regular fish that are smaller than you
 const BIGGER = [1.05, 1.85]; // size range of the rest, relative to you
 // While you're small the water is crowded, and most fish are bigger than you (some by a lot), so
-// getting going takes a while and there's plenty to dodge. These ease into the normal values
-// above by the time you're EARLY_UNTIL of the way to winning.
+// getting going takes a while and there's plenty to dodge. These, and the early settings for each
+// difficulty in settings.ts, ease into the normal values above by the time you're EARLY_UNTIL of
+// the way to winning (the food share more slowly; see foodShare()).
 const EARLY_MAX_FISH = 22;
 const EARLY_SPAWN_INTERVAL = 0.35;
-const EARLY_FOOD_SHARE = 0.3; // eases up more slowly than the rest; see foodShare()
-const EARLY_BIGGER = [1.5, 6];
-const EARLY_GIANT_CHANCE = 0.2;
-const EARLY_MAX_DANGER_COVER = 0.3;
 const EARLY_UNTIL = 0.3;
-const FAST_CHANCE = 0.3; // share of bigger fish that dart along faster than the rest
 // In the feeding frenzy everything is food, so pack in lots of smaller fish to gobble up.
 const FRENZY_MAX_FISH = 28;
 const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
-const SHARK_CHANCE = 0.07; // sharks can't be eaten, whatever their size
-const DARTER_CHANCE = 0.6; // share of sharks that now and then cut back in a quick Z
+// Fish colors run from green through blue to pink, well clear of the player's orange (hue 26).
+const FISH_HUES = [90, 330];
 const PLAYER_SPEED_SMALL = 320; // top speed when you start out tiny...
 const PLAYER_SPEED_BIG = 200; // ...slowing down to this by the win size
 const PLAYER_ACCEL = 500; // px/s², so about half a second from standstill to full speed
@@ -235,6 +239,24 @@ let killer: Fish | null = null;
 let hooked = false; // caught on the fishing line, rather than eaten
 let pinched = false; // got by the crab
 let time = 0;
+// what's picked on the title menu, remembered for next visit
+let mode: Mode = loadChoice("fishy-mode", MODES, "classic");
+let difficulty: Difficulty = loadChoice("fishy-difficulty", DIFFICULTIES, "medium");
+let tuning = DIFFICULTY[difficulty];
+let startedAt = 0;
+// Speed mode
+let combo = 0; // bites in the current chain; 0 once it's lapsed
+let lastBite = 0;
+let timeBonus = 0;
+
+function loadChoice<T extends string>(key: string, options: T[], fallback: T): T {
+  try {
+    const saved = localStorage.getItem(key) as T | null;
+    return saved && options.includes(saved) ? saved : fallback;
+  } catch {
+    return fallback; // storage blocked
+  }
+}
 
 function makePlayer(): Fish {
   return new Fish(W / 2, H / 2, 0, 0, START_RADIUS, 26); // orange; much redder clashes with the danger outlines
@@ -249,8 +271,12 @@ function reset(): void {
   killer = null;
   hooked = false;
   pinched = false;
-  hook.reset();
-  crab.reset();
+  tuning = DIFFICULTY[difficulty];
+  hook.reset(tuning.hook);
+  crab.reset(tuning.crab);
+  startedAt = time;
+  combo = 0;
+  timeBonus = 0;
   myRank = -1;
   syncUI();
 }
@@ -271,15 +297,31 @@ function setPaused(p: boolean): void {
 function endGame(next: State): void {
   state = next;
   endedAt = time;
+  if (next === "won" && mode === "speed") {
+    timeBonus = Math.max(0, Math.round(SPEED_PAR - elapsed())) * TIME_BONUS;
+    score += timeBonus;
+  }
   syncUI();
   // get the latest board, and ask for a name if this score makes it
   const ended = endedAt;
-  fetchScores()
+  loadBoard()
     .then((scores) => {
-      board = scores;
-      if (gameOver() && endedAt === ended && qualifies(scores, score)) openForm();
+      if (scores && gameOver() && endedAt === ended && qualifies(scores, score)) openForm();
     })
     .catch((err) => console.warn(err));
+}
+
+/** Seconds of play so far, not counting pauses; it stops when the game ends. */
+function elapsed(): number {
+  return (state === "playing" ? time : endedAt) - startedAt;
+}
+
+/** Points for a bite: Classic goes by its size next to yours, Speed by how quickly it followed the last. */
+function bitePoints(classic: number): number {
+  if (mode === "classic") return classic;
+  combo = Math.min(COMBO_MAX, combo + 1);
+  lastBite = time;
+  return SPEED_POINTS * combo;
 }
 
 // ---- title menu ----
@@ -300,6 +342,7 @@ function syncUI(): void {
 function showMenu(): void {
   state = "menu";
   player = makePlayer();
+  if (!tuning.crab) crab.reset(); // back from Easy: let it scuttle by behind the menu again
   showScreen("main");
   syncUI();
 }
@@ -307,7 +350,46 @@ function showMenu(): void {
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
   if (name === "scores") loadMenuScores();
-  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button`)?.focus();
+  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]`)?.focus();
+}
+
+/** Pick a mode or difficulty on the menu. The high scores shown switch to its board. */
+function pick(kind: string, value: string): void {
+  if (kind === "mode" && MODES.includes(value as Mode)) mode = value as Mode;
+  else if (kind === "difficulty" && DIFFICULTIES.includes(value as Difficulty)) difficulty = value as Difficulty;
+  else return;
+  try {
+    localStorage.setItem(`fishy-${kind}`, value);
+  } catch {
+    // not remembering it is fine
+  }
+  board = null;
+  syncPicks();
+  if (!menu.querySelector<HTMLElement>('[data-screen="scores"]')!.hidden) loadMenuScores();
+}
+
+/** Light up what's picked (there's a set of choices on the main and high score screens). */
+function syncPicks(): void {
+  for (const b of menu.querySelectorAll<HTMLButtonElement>(".pick button")) {
+    const picked = b.parentElement!.dataset.pick === "mode" ? mode : difficulty;
+    b.setAttribute("aria-pressed", String(b.dataset.value === picked));
+  }
+  menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
+}
+
+/** "Speed · Hard", say. */
+function boardName(): string {
+  return `${LABEL[mode]} · ${LABEL[difficulty]}`;
+}
+
+/** The board for the current mode and difficulty, freshly fetched. Resolves to null if the
+ * choice changes while it loads. */
+async function loadBoard(): Promise<Entry[] | null> {
+  const [m, d] = [mode, difficulty];
+  const scores = await fetchScores({ mode: m, difficulty: d });
+  if (m !== mode || d !== difficulty) return null;
+  board = scores;
+  return scores;
 }
 
 function moveMenuFocus(step: number): void {
@@ -326,9 +408,9 @@ function loadMenuScores(): void {
   };
   if (board) renderMenuScores(board);
   else show("Loading…");
-  fetchScores()
+  loadBoard()
     .then((scores) => {
-      board = scores;
+      if (!scores) return; // picked another board meanwhile; that one's loading now
       if (scores.length) renderMenuScores(scores);
       else show(LOCAL ? "None yet. Go set one!" : "None yet. Be the first!");
     })
@@ -351,13 +433,15 @@ function renderMenuScores(scores: Entry[]): void {
 }
 
 menu.addEventListener("click", (e) => {
-  const go = (e.target as HTMLElement).closest("button")?.dataset.go;
-  if (!go) return;
+  const button = (e.target as HTMLElement).closest("button");
+  if (!button) return;
   sound.start(); // a click is the gesture browsers want before they'll play audio
-  if (go === "start") {
+  const go = button.dataset.go;
+  if (button.dataset.value) pick(button.parentElement!.dataset.pick!, button.dataset.value);
+  else if (go === "start") {
     (document.activeElement as HTMLElement | null)?.blur();
     reset();
-  } else showScreen(go);
+  } else if (go) showScreen(go);
 });
 
 toMenu.addEventListener("click", () => {
@@ -365,6 +449,7 @@ toMenu.addEventListener("click", () => {
   showMenu();
 });
 
+syncPicks();
 showScreen("main");
 
 // ---- high scores ----
@@ -390,9 +475,7 @@ if (LOCAL) {
   });
 }
 
-fetchScores()
-  .then((scores) => (board = scores))
-  .catch((err) => console.warn(err));
+loadBoard().catch((err) => console.warn(err));
 
 function openForm(): void {
   entering = true;
@@ -421,7 +504,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const name = nameInput.value.trim();
     if (LOCAL && !name) throw new Error("Type your initials, or Skip");
-    const saved = await submitScore(name, score);
+    const saved = await submitScore({ mode, difficulty }, name, score);
     board = saved.scores;
     myRank = saved.rank;
     try {
@@ -442,7 +525,7 @@ document.getElementById("hs-skip")!.addEventListener("click", skipForm);
 function skipForm(): void {
   closeForm();
   if (!LOCAL) return;
-  submitScore(NO_INITIALS, score)
+  submitScore({ mode, difficulty }, NO_INITIALS, score)
     .then((saved) => {
       board = saved.scores;
       myRank = saved.rank;
@@ -457,8 +540,8 @@ function spawnFish(): void {
   const e = earlyDone();
   const ease = (early: number, normal: number) => early + (normal - early) * e;
   const roll = Math.random();
-  const shark = !frenzy && roll < SHARK_CHANCE;
-  const giant = !frenzy && !shark && roll < SHARK_CHANCE + ease(EARLY_GIANT_CHANCE, GIANT_CHANCE);
+  const shark = !frenzy && roll < tuning.sharkChance;
+  const giant = !frenzy && !shark && roll < tuning.sharkChance + ease(tuning.earlyGiantChance, GIANT_CHANCE);
   let r: number;
   if (frenzy) {
     r = player.r * (0.15 + Math.random() * 0.4);
@@ -467,7 +550,7 @@ function spawnFish(): void {
   } else if (giant) {
     r = Math.max(90 + Math.random() * 90, player.r * (2.2 + Math.random() * 1.5));
   } else {
-    const [lo, hi] = [ease(EARLY_BIGGER[0], BIGGER[0]), ease(EARLY_BIGGER[1], BIGGER[1])];
+    const [lo, hi] = [ease(tuning.earlyBigger[0], BIGGER[0]), ease(tuning.earlyBigger[1], BIGGER[1])];
     // keep the fish on screen at the right mix of food and danger, rather than leaving it to chance
     const food = fish.filter((f) => !dangerous(f)).length;
     let ratio = lo + Math.random() * (hi - lo);
@@ -479,24 +562,24 @@ function spawnFish(): void {
   r = Math.min(topSize, r);
 
   // already enough fish around that can eat you, so leave room to dodge
-  const dangerLimit = ease(EARLY_MAX_DANGER_COVER, MAX_DANGER_COVER);
+  const dangerLimit = ease(tuning.earlyMaxDangerCover, MAX_DANGER_COVER);
   if ((shark || r >= player.r) && cover(fish.filter(dangerous)) + bodyCover(r) > dangerLimit) return;
   if (cover(fish) + bodyCover(r) > (frenzy ? FRENZY_MAX_COVER : MAX_COVER)) return;
 
   const fromLeft = Math.random() < 0.5;
   // giants cruise slowly so there's time to get out of the way
   let speed = 40 + Math.random() * 100 + 300 / (r + 10);
-  if (!giant && r > player.r && Math.random() < FAST_CHANCE) speed *= 1.4 + Math.random() * 0.4;
+  if (!giant && r > player.r && Math.random() < tuning.fastChance) speed *= 1.4 + Math.random() * 0.4;
   if (giant) speed = 30 + Math.random() * 40;
   if (shark) speed = 110 + Math.random() * 80;
   const margin = r * 1.5; // just out of sight, so big ones don't take ages to arrive
   const x = fromLeft ? -margin : W + margin;
   const y = r * 0.6 + Math.random() * Math.max(1, H - SAND_HEIGHT - r * 0.6);
   const vy = (Math.random() - 0.5) * 30;
-  const hue = 170 + Math.random() * 160; // blues/greens/purples, so the player (orange) stands out
+  const hue = FISH_HUES[0] + Math.random() * (FISH_HUES[1] - FISH_HUES[0]);
 
   const f = new Fish(x, y, fromLeft ? speed : -speed, vy, r, hue, shark ? "shark" : "fish");
-  f.darter = shark && Math.random() < DARTER_CHANCE;
+  f.darter = shark && Math.random() < tuning.darterChance;
   fish.push(f);
 }
 
@@ -526,6 +609,7 @@ function update(dt: number): void {
   scenery.update(dt);
   hook.update(dt);
   crab.update(dt);
+  if (combo && time - lastBite > COMBO_WINDOW) combo = 0;
 
   for (const b of bubbles) {
     b.y -= b.speed * dt;
@@ -631,7 +715,7 @@ function update(dt: number): void {
     if (inFrenzy()) {
       crab.eaten();
       sound.burp(0.8);
-      score += CRAB_POINTS;
+      score += bitePoints(CRAB_POINTS);
     } else {
       crab.pinch();
       sound.eaten();
@@ -653,7 +737,7 @@ function update(dt: number): void {
       if (!dangerous(f)) {
         // bigger meals and a bigger you both make for a deeper burp
         sound.burp(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
-        score += Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3));
+        score += bitePoints(Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3)));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
         fish.splice(i, 1);
         if (player.r >= winRadius()) {
@@ -680,7 +764,7 @@ function foodShare(): number {
   // Stays near the early value for longer than the other early settings, reaching normal only
   // as the frenzy starts, so big fish outnumber food for most of the way up.
   const t = Math.min(1, progress() / TOP_FISH_SHARE) ** 2;
-  return EARLY_FOOD_SHARE + (FOOD_SHARE - EARLY_FOOD_SHARE) * t;
+  return tuning.earlyFoodShare + (FOOD_SHARE - tuning.earlyFoodShare) * t;
 }
 
 /** 0 at the start, rising to 1 once you're past the slow start. */
@@ -764,7 +848,8 @@ function drawHud(): void {
   ctx.font = "bold 20px system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.fillText(`Score: ${score}`, 16, 14);
+  const speed = mode === "speed";
+  ctx.fillText(speed ? `Score: ${score} · ${clock(elapsed())}` : `Score: ${score}`, 16, 14);
 
   // growth bar toward the win size
   const barW = 200;
@@ -773,14 +858,30 @@ function drawHud(): void {
   ctx.fillStyle = "#ffd166";
   ctx.fillRect(16, 46, barW * progress(), 10);
 
+  // Speed: the combo, with a bar under the growth bar for the time left to keep it going
+  if (speed && combo) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.fillRect(16, 60, barW, 4);
+    ctx.fillStyle = "#7ee8fa";
+    ctx.fillRect(16, 60, barW * Math.max(0, 1 - (time - lastBite) / COMBO_WINDOW), 4);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px system-ui, sans-serif";
+    ctx.fillText(`x${combo}`, 16 + barW + 10, 42);
+  }
+
   ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
   ctx.font = "14px system-ui, sans-serif";
   const mute = sound.muted ? "unmute" : "mute";
   const hint = touchUI
     ? "Drag anywhere to swim"
     : `Arrows / WASD to swim · Space to pause · M to ${mute}`;
-  ctx.fillText(hint, 16, 66);
+  ctx.fillText(hint, 16, speed ? 72 : 66);
   ctx.restore();
+}
+
+/** Seconds as m:ss. */
+function clock(s: number): string {
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 }
 
 function drawJoystick(): void {
@@ -880,7 +981,8 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.font = "bold 56px system-ui, sans-serif";
   ctx.fillText(title, W / 2, top);
   ctx.font = "24px system-ui, sans-serif";
-  ctx.fillText(`Score: ${score.toLocaleString()}`, W / 2, top + 50);
+  const bonus = state === "won" && timeBonus ? ` (+${timeBonus.toLocaleString()} time bonus)` : "";
+  ctx.fillText(`Score: ${score.toLocaleString()}${bonus}`, W / 2, top + 50);
   ctx.font = "18px system-ui, sans-serif";
   if (showBoard && entering) {
     ctx.fillStyle = "#ffd166";
@@ -904,7 +1006,7 @@ function drawBoard(y: number): void {
 
   ctx.font = "bold 18px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
-  let heading = BOARD_TITLE;
+  let heading = `${BOARD_TITLE} · ${boardName()}`;
   if (LOCAL && myRank === 0) heading = "New best score!";
   else if (LOCAL && myRank > 0) heading = "You made your top 5!";
   ctx.fillText(heading, W / 2, y);
@@ -939,7 +1041,7 @@ function draw(): void {
     return;
   }
 
-  for (const f of fish) f.draw(ctx, time, dangerous(f));
+  for (const f of fish) f.draw(ctx, time, tuning.outlines && dangerous(f));
   player.draw(ctx, time);
   hook.draw(ctx, time);
   scenery.drawFront(ctx, time);

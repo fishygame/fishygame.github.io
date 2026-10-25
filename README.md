@@ -27,8 +27,15 @@ to the fishygame org.
 
 ## Controls
 
-- The game opens on a title menu (Start Game, Instructions, High Scores). After a game ends,
-  the Main menu button or Esc goes back to it.
+- The game opens on a title menu: pick a mode and difficulty (remembered for next time), then
+  Start Game, Instructions or High Scores. After a game ends, the Main menu button or Esc goes
+  back to it.
+- **Classic** scores each fish by its size next to yours (bigger meals are worth far more).
+  **Speed** scores every fish the same, times a combo that grows with each bite taken within 2
+  seconds of the last (up to x10), plus a time bonus for winning under 5 minutes.
+- **Medium** is the original game. **Easy** has no sharks or crab, a gentler start and rarer
+  hooks. **Hard** has more sharks (all of them darters), more hooks and crabs, more fast fish,
+  and no red outlines on the fish that can eat you.
 - Arrow keys or WASD swim. Your fish builds up speed, then coasts to a stop when you let go.
 - On a touch screen, put a finger down anywhere and drag to steer; drag further to swim faster.
   The buttons in the top-right corner pause and mute.
@@ -41,14 +48,17 @@ to the fishygame org.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
-- A top-5 score asks for a name (up to 8 characters) for the global high score board.
+- A top-5 score asks for a name (up to 8 characters) for the global high score board. Each mode
+  and difficulty has its own board.
 - M mutes all sound. The music starts on your first key press, click or tap.
 
 ## Layout
 
-- `src/main.ts`: game loop, input, spawning, collisions, HUD and screens
+- `src/main.ts`: game loop, input, spawning, collisions, scoring, HUD and screens
+- `src/settings.ts`: the game modes, and the tuning for each difficulty
 - `src/fish.ts`: the `Fish` class (movement, and drawing for both fish and sharks)
 - `src/hook.ts`: the fishing line that drops in now and then, and sometimes catches a fish
+- `src/crab.ts`: the crab that scuttles along the sand now and then
 - `src/scenery.ts`: the aquarium backdrop (water, sand, seaweed, castle, treasure chest, and
   the whale and sea turtles that swim by now and then)
 - `src/sound.ts`: background music and sound effects
@@ -59,22 +69,25 @@ to the fishygame org.
 
 ## Tweaks worth trying
 
-Constants at the top of `src/main.ts` control win size, growth rate, spawn rate,
-giant fish, sharks, and player speed/acceleration. To change the music, replace
-`src/assets/music.mp3` and update the loop points at the top of `src/sound.ts`. In
-`src/fish.ts`, the red outline on dangerous fish is the `danger` flag in `draw()`; remove it
-for a harder game.
+Constants at the top of `src/main.ts` control win size, growth rate, spawn rate, giant fish,
+fish colors, Speed mode scoring, and player speed/acceleration. What changes with difficulty
+(sharks, the crowded start, hook and crab timing, red outlines) is in `src/settings.ts`. To change the music, replace
+`src/assets/music.mp3` and update the loop points at the top of `src/sound.ts`. 
 
 ## High scores
 
 The board is the `fishy-high-scores` Lambda in AWS us-east-1, with a public function URL (set in
 `src/highscores.ts`) and the `fishy-high-scores` DynamoDB table. The Lambda checks names
 (length, characters and a bad-word filter), limits each IP to one score every 10 seconds, and
-keeps the top 5. After editing `server/high-scores.mjs`, upload it with:
+keeps the top 5 of each mode and difficulty. Classic on Medium is the original board, item
+`board`; the others are `board#<mode>#<difficulty>` (e.g. `board#speed#hard`). Requests without a
+mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
+sends them. After editing `server/high-scores.mjs`, upload it with:
 
 ```bash
 cp server/high-scores.mjs index.mjs && zip fn.zip index.mjs && rm index.mjs
 aws lambda update-function-code --function-name fishy-high-scores --zip-file fileb://fn.zip && rm fn.zip
 ```
 
-To wipe the board: `aws dynamodb delete-item --table-name fishy-high-scores --key '{"pk":{"S":"board"}}'`
+To wipe a board: `aws dynamodb delete-item --table-name fishy-high-scores --key '{"pk":{"S":"board"}}'`
+(or `board#speed#hard`, and so on)

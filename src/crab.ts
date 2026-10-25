@@ -3,8 +3,10 @@
 // to eat it. It keeps the bottom of the screen from being a safe place to hide, like the hook
 // does for the top.
 
-const FIRST = [20, 40]; // seconds before the first one shows up (min, max)
-const GAP = [25, 50]; // seconds between one leaving and the next arriving
+import type { Timing } from "./settings";
+
+/** On Medium; settings.ts has the others. Gap is from one leaving to the next arriving. */
+export const CRAB_TIMING: Timing = { first: [20, 40], gap: [25, 50] };
 const STOPS = [2, 4]; // how many times it stops before heading off (whole numbers)
 const PAUSE = [0.8, 2]; // seconds per stop
 const SPEED = 100; // px/s, scuttling
@@ -22,7 +24,8 @@ export class Crab {
   private x = 0;
   private target = 0;
   private phase: "idle" | "walk" | "pause" = "idle";
-  private timer = between(FIRST); // idle: until it arrives; pause: until it walks on
+  private timing: Timing | null = CRAB_TIMING;
+  private timer = between(CRAB_TIMING.first); // idle: until it arrives; pause: until it walks on
   private stops = 0; // left before it heads off
   private stride = 0; // leg animation, advancing as it walks
   private clock = 0;
@@ -32,9 +35,11 @@ export class Crab {
     this.H = H;
   }
 
-  reset(): void {
+  /** Start over with no crab about. With no timing, none comes at all. */
+  reset(timing: Timing | null = CRAB_TIMING): void {
+    this.timing = timing;
     this.phase = "idle";
-    this.timer = between(FIRST);
+    this.timer = timing ? between(timing.first) : Infinity;
   }
 
   update(dt: number): void {
@@ -57,7 +62,7 @@ export class Crab {
       this.x = this.target;
       if (this.x < -MARGIN / 2 || this.x > this.W + MARGIN / 2) {
         this.phase = "idle"; // gone
-        this.timer = between(GAP);
+        this.timer = this.nextVisit();
       } else {
         this.phase = "pause";
         this.timer = between(PAUSE);
@@ -81,7 +86,11 @@ export class Crab {
   /** Eaten: gone until the next one. */
   eaten(): void {
     this.phase = "idle";
-    this.timer = between(GAP);
+    this.timer = this.nextVisit();
+  }
+
+  private nextVisit(): number {
+    return this.timing ? between(this.timing.gap) : Infinity;
   }
 
   /** The body and claws as a horizontal capsule, or null when there's no crab about. */
