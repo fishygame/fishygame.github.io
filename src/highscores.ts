@@ -23,6 +23,7 @@ export interface Board {
 export interface Entry {
   name: string; // the player's name, or initials on a local board
   score: number;
+  time?: number; // Speed boards: how long the game took, in whole seconds
 }
 
 export async function fetchScores(board: Board): Promise<Entry[]> {
@@ -37,14 +38,15 @@ export async function submitScore(
   board: Board,
   name: string,
   score: number,
+  time?: number,
 ): Promise<{ scores: Entry[]; rank: number }> {
-  if (LOCAL) return saveLocal(board, name, score);
+  if (LOCAL) return saveLocal(board, name, score, time);
   let res: Response;
   try {
     res = await fetch(API, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, score, mode: board.mode, difficulty: board.difficulty }),
+      body: JSON.stringify({ name, score, time, mode: board.mode, difficulty: board.difficulty }),
     });
   } catch {
     throw new Error("Couldn't reach the high score board");
@@ -74,8 +76,8 @@ function loadLocal(board: Board): Entry[] {
   }
 }
 
-function saveLocal(board: Board, name: string, score: number): { scores: Entry[]; rank: number } {
-  const entry = { name, score };
+function saveLocal(board: Board, name: string, score: number, time?: number): { scores: Entry[]; rank: number } {
+  const entry: Entry = time === undefined ? { name, score } : { name, score, time };
   // ties go to whoever got there first
   const scores = [...loadLocal(board), entry].sort((a, b) => b.score - a.score).slice(0, TOP);
   try {

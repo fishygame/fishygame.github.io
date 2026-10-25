@@ -1,8 +1,10 @@
 // High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 5 of each game
 // mode and difficulty in DynamoDB.
 //   GET  ?mode=&difficulty= -> { scores: [{ name, score }] }
-//   POST { name, score, mode, difficulty } -> { scores, rank } (rank is the new entry's index, or -1
-//        if it missed out)
+//   POST { name, score, mode, difficulty, time } -> { scores, rank } (rank is the new entry's index,
+//        or -1 if it missed out)
+// Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
+// have none.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
 // the page still work. Names are checked here, not in the game, so the filter can't be skipped by
 // editing the page.
@@ -16,6 +18,7 @@ const TABLE = process.env.TABLE;
 const TOP = 5;
 const NAME_MAX = 8;
 const MAX_SCORE = 1_000_000; // far beyond a real game; anything bigger is someone poking the API
+const MAX_TIME = 3600; // seconds; likewise
 const COOLDOWN = 10; // seconds between submissions from the same IP
 const MODES = ["classic", "speed"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
@@ -103,6 +106,10 @@ async function submit(event) {
   if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) return json(400, { error: "Bad score" });
   if (!name) return json(400, { error: `Use 1-${NAME_MAX} letters or numbers` });
   if (isRude(name)) return json(400, { error: "Please pick a different name" });
+  const time = body.mode === "speed" ? body.time : undefined;
+  if (time !== undefined && (!Number.isInteger(time) || time < 0 || time > MAX_TIME)) {
+    return json(400, { error: "Bad time" });
+  }
 
   const ip = event.requestContext?.http?.sourceIp ?? "unknown";
   if (!(await claimCooldown(ip))) return json(429, { error: "Slow down a little and try again" });
@@ -110,7 +117,7 @@ async function submit(event) {
   // read-modify-write with a version check, retrying if two scores land at once
   for (let attempt = 0; attempt < 5; attempt++) {
     const board = await getBoard(pk);
-    const entry = { name, score, at: new Date().toISOString() };
+    const entry = { name, score, ...(time !== undefined && { time }), at: new Date().toISOString() };
     // ties go to whoever got there first
     const scores = [...board.scores, entry].sort((a, b) => b.score - a.score).slice(0, TOP);
     const rank = scores.indexOf(entry);
@@ -132,8 +139,8 @@ async function submit(event) {
   return json(503, { error: "Busy, try again" });
 }
 
-function publicEntry({ name, score }) {
-  return { name, score };
+function publicEntry({ name, score, time }) {
+  return time === undefined ? { name, score } : { name, score, time };
 }
 
 export const handler = async (event) => {

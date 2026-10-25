@@ -87,7 +87,17 @@ canvas {
 #menu ol li {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
+}
+
+/* Speed boards: each game's time, just left of the score */
+#menu ol li .time {
+  margin-left: auto;
+  min-width: 3em;
+  text-align: right;
+  font-size: 16px;
+  opacity: 0.75;
 }
 
 #menu button,

@@ -82,7 +82,8 @@ The board is the `fishy-high-scores` Lambda in AWS us-east-1, with a public func
 keeps the top 5 of each mode and difficulty. Classic on Medium is the original board, item
 `board`; the others are `board#<mode>#<difficulty>` (e.g. `board#speed#hard`). Requests without a
 mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
-sends them. After editing `server/high-scores.mjs`, upload it with:
+sends them. Speed boards also keep each game's time (`time`, whole seconds); scores saved
+before 2026-10-25's time update have none and show a dash. After editing `server/high-scores.mjs`, upload it with:
 
 ```bash
 cp server/high-scores.mjs index.mjs && zip fn.zip index.mjs && rm index.mjs

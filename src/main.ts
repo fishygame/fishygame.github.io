@@ -427,7 +427,14 @@ function renderMenuScores(scores: Entry[]): void {
     name.textContent = `${i + 1}. ${entry.name}`; // textContent, so names can't inject markup
     const points = document.createElement("span");
     points.textContent = entry.score.toLocaleString();
-    li.append(name, points);
+    li.append(name);
+    if (mode === "speed") {
+      const took = document.createElement("span");
+      took.className = "time";
+      took.textContent = boardTime(entry);
+      li.append(took);
+    }
+    li.append(points);
     menuScores.append(li);
   });
 }
@@ -504,7 +511,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const name = nameInput.value.trim();
     if (LOCAL && !name) throw new Error("Type your initials, or Skip");
-    const saved = await submitScore({ mode, difficulty }, name, score);
+    const saved = await submitScore({ mode, difficulty }, name, score, scoreTime());
     board = saved.scores;
     myRank = saved.rank;
     try {
@@ -521,11 +528,21 @@ form.addEventListener("submit", async (e) => {
 });
 document.getElementById("hs-skip")!.addEventListener("click", skipForm);
 
+/** Speed boards keep how long the game took; Classic ones don't. */
+function scoreTime(): number | undefined {
+  return mode === "speed" ? Math.floor(elapsed()) : undefined;
+}
+
+/** A Speed board entry's time, or a dash for scores saved before times were kept. */
+function boardTime(entry: Entry): string {
+  return entry.time === undefined ? "—" : clock(entry.time);
+}
+
 /** Skipping leaves a shared board alone, but your own board still keeps the score. */
 function skipForm(): void {
   closeForm();
   if (!LOCAL) return;
-  submitScore({ mode, difficulty }, NO_INITIALS, score)
+  submitScore({ mode, difficulty }, NO_INITIALS, score, scoreTime())
     .then((saved) => {
       board = saved.scores;
       myRank = saved.rank;
@@ -981,8 +998,9 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.font = "bold 56px system-ui, sans-serif";
   ctx.fillText(title, W / 2, top);
   ctx.font = "24px system-ui, sans-serif";
+  const took = mode === "speed" ? ` · ${clock(elapsed())}` : "";
   const bonus = state === "won" && timeBonus ? ` (+${timeBonus.toLocaleString()} time bonus)` : "";
-  ctx.fillText(`Score: ${score.toLocaleString()}${bonus}`, W / 2, top + 50);
+  ctx.fillText(`Score: ${score.toLocaleString()}${took}${bonus}`, W / 2, top + 50);
   ctx.font = "18px system-ui, sans-serif";
   if (showBoard && entering) {
     ctx.fillStyle = "#ffd166";
@@ -995,12 +1013,15 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
 }
 
 function drawBoard(y: number): void {
+  // Speed boards have a column for each game's time, so they're a little wider
+  const speed = mode === "speed";
+  const half = speed ? 180 : 160;
   // a panel behind it, so fish swimming past don't make it hard to read
   ctx.save();
   ctx.shadowColor = "transparent";
   ctx.fillStyle = "rgba(0, 20, 40, 0.55)";
   ctx.beginPath();
-  ctx.roundRect(W / 2 - 160, y - 24, 320, 48 + Math.max(1, board!.length) * 28, 12);
+  ctx.roundRect(W / 2 - half, y - 24, half * 2, 48 + Math.max(1, board!.length) * 28, 12);
   ctx.fill();
   ctx.restore();
 
@@ -1015,16 +1036,22 @@ function drawBoard(y: number): void {
     ctx.font = "18px system-ui, sans-serif";
     ctx.fillText("None yet!", W / 2, y + 32);
   }
-  ctx.font = "20px system-ui, sans-serif";
   board!.forEach((entry, i) => {
     const rowY = y + 32 + i * 28;
+    ctx.font = "20px system-ui, sans-serif";
     ctx.fillStyle = i === myRank ? "#ffd166" : "#fff";
     ctx.textAlign = "right";
-    ctx.fillText(`${i + 1}.`, W / 2 - 100, rowY);
+    ctx.fillText(`${i + 1}.`, W / 2 - half + 60, rowY);
     ctx.textAlign = "left";
-    ctx.fillText(entry.name, W / 2 - 88, rowY);
+    ctx.fillText(entry.name, W / 2 - half + 72, rowY);
     ctx.textAlign = "right";
-    ctx.fillText(entry.score.toLocaleString(), W / 2 + 130, rowY);
+    ctx.fillText(entry.score.toLocaleString(), W / 2 + half - 30, rowY);
+    if (speed) {
+      ctx.font = "16px system-ui, sans-serif";
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(boardTime(entry), W / 2 + 60, rowY);
+      ctx.globalAlpha = 1;
+    }
   });
   ctx.textAlign = "center";
 }
