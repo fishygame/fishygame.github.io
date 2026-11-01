@@ -411,7 +411,7 @@ function syncPicks(): void {
   }
   menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
   menu.querySelector(".board-help")!.textContent =
-    period === "week" ? "Starts fresh every Monday." : LOCAL ? "" : "Each player's best score.";
+    period === "week" ? "Starts fresh every Monday." : "";
 }
 
 /** Switch the menu's high scores between this week and all time. */

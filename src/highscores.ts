@@ -1,10 +1,9 @@
 // Top-10 high score boards, one for each mode and difficulty, each kept both for all time and for
 // this week (starting fresh every Monday). Two flavors, picked at build time with VITE_SCORE_BOARD:
 //   "global" (the default): shared boards kept by a small AWS Lambda (see server/high-scores.mjs);
-//            a score that makes either board asks for a name. All time keeps only each name's best
-//            score, so one player can't fill it.
-//   "local":  each player's own best scores, kept in their browser under their initials. Repeats
-//            are fine here, since it's usually one person's board.
+//            a score that makes either board asks for a name.
+//   "local":  each player's own best scores, kept in their browser under their initials.
+// Either way repeats are allowed: a player with the ten best scores gets all ten places.
 
 import type { Difficulty, Mode } from "./settings";
 

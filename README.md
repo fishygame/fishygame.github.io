@@ -49,7 +49,7 @@ to the fishygame org.
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
 - Each mode and difficulty has two global top-10 boards: this week (starts fresh every Monday, US
-  Eastern) and all time (only each name's best score, so one player can't fill it). A score that
+  Eastern) and all time. Both allow repeats, so one player can hold every place. A score that
   makes either one asks for a name (up to 8 characters). The end screen shows both side by side,
   or just one on a narrow screen; the High Scores menu switches between them.
 - M mutes all sound, and N (or the skip button in the corner) skips to the next song. The music
@@ -87,8 +87,7 @@ fish colors, Speed mode scoring, and player speed/acceleration. What changes wit
 The board is the `fishy-high-scores` Lambda in AWS us-east-1, with a public function URL (set in
 `src/highscores.ts`) and the `fishy-high-scores` DynamoDB table. The Lambda checks names
 (length, characters and a bad-word filter), limits each IP to one score every 10 seconds, and
-keeps the top 10 of each mode and difficulty, all time and this week. All time keeps only each
-name's best score (names match ignoring case); this week allows repeats. Classic on Medium's
+keeps the top 10 of each mode and difficulty, all time and this week, repeats allowed. Classic on Medium's
 all-time board is the original one, item `board`; the others are `board#<mode>#<difficulty>`
 (e.g. `board#speed#hard`). This week's are `week#<Monday>#<mode>#<difficulty>` (e.g.
 `week#2026-11-02#speed#hard`, the Monday by US Eastern time) and expire a year later through the

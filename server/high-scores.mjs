@@ -3,8 +3,8 @@
 //   GET  ?mode=&difficulty= -> { scores: [{ name, score }], weekly: [...] }
 //   POST { name, score, mode, difficulty, time } -> { scores, rank, weekly, weeklyRank } (a rank is
 //        the new entry's index on that board, or -1 if it missed out)
-// `scores` is the all-time board, which keeps only each name's best score so one player can't fill
-// it. The weekly board allows repeats and starts fresh every Monday, US Eastern time.
+// `scores` is the all-time board. The weekly board starts fresh every Monday, US Eastern time. Both
+// allow repeats: a player with the ten best scores gets all ten places.
 // Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
 // have none.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
@@ -83,21 +83,9 @@ export function weekStart(now = new Date()) {
   return day.toISOString().slice(0, 10);
 }
 
-const byScore = (a, b) => b.score - a.score; // a stable sort, so ties go to whoever got there first
-
-/** All time: each name's best score only (names match ignoring case), top 10. */
-function rankAllTime(scores) {
-  const best = new Map();
-  for (const e of scores) {
-    const key = e.name.toLowerCase();
-    if (!best.has(key) || e.score > best.get(key).score) best.set(key, e);
-  }
-  return [...best.values()].sort(byScore).slice(0, TOP);
-}
-
-/** This week: repeats allowed, top 10. */
-function rankWeekly(scores) {
-  return [...scores].sort(byScore).slice(0, TOP);
+/** The top 10, highest first. The sort is stable, so ties go to whoever got there first. */
+function top(scores) {
+  return [...scores].sort((a, b) => b.score - a.score).slice(0, TOP);
 }
 
 async function getBoard(pk) {
@@ -148,9 +136,9 @@ async function submit(event) {
   if (!(await claimCooldown(ip))) return json(429, { error: "Slow down a little and try again" });
 
   const entry = { name, score, ...(time !== undefined && { time }), at: new Date().toISOString() };
-  const all = await place(keys.all, entry, rankAllTime);
+  const all = await place(keys.all, entry);
   if (!all) return json(503, { error: "Busy, try again" });
-  const week = await place(keys.week, entry, rankWeekly, Math.floor(Date.now() / 1000) + WEEK_TTL);
+  const week = await place(keys.week, entry, Math.floor(Date.now() / 1000) + WEEK_TTL);
   if (!week) return json(503, { error: "Busy, try again" });
   return json(200, {
     scores: all.scores.map(publicEntry),
@@ -163,12 +151,12 @@ async function submit(event) {
 /** Add an entry to one board: read-modify-write with a version check, retrying if two scores land
  * at once. Resolves to the board and the entry's place on it (-1 if it missed out), or null if it
  * stayed too busy. */
-async function place(pk, entry, rank, expires) {
+async function place(pk, entry, expires) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const board = await getBoard(pk);
-    const scores = rank([...board.scores, entry]);
+    const scores = top([...board.scores, entry]);
     const at = scores.indexOf(entry);
-    if (at === -1) return { scores: rank(board.scores), rank: -1 };
+    if (at === -1) return { scores: board.scores, rank: -1 };
     try {
       await db.send(
         new PutCommand({
@@ -198,8 +186,8 @@ export const handler = async (event) => {
     if (!keys) return json(400, { error: "Bad game mode" });
     const [all, week] = await Promise.all([getBoard(keys.all), getBoard(keys.week)]);
     return json(200, {
-      scores: rankAllTime(all.scores).map(publicEntry),
-      weekly: rankWeekly(week.scores).map(publicEntry),
+      scores: all.scores.map(publicEntry),
+      weekly: week.scores.map(publicEntry),
     });
   }
   if (method === "POST") return submit(event);
