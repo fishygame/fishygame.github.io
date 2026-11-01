@@ -12,8 +12,8 @@
     <title>Fishy</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <script type="module" crossorigin src="./assets/index-DRFfbbFT.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BAGi7GQ5.css">
+    <script type="module" crossorigin src="./assets/index-CCKMEZze.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-YOXKGjto.css">
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -79,13 +79,18 @@
           <button data-value="medium">Medium</button>
           <button data-value="hard">Hard</button>
         </div>
+        <div class="pick" data-pick="period" role="group" aria-label="Which scores">
+          <button data-value="week">This week</button>
+          <button data-value="all">All time</button>
+        </div>
+        <p class="board-help"></p>
         <ol id="menu-scores"></ol>
         <button data-go="main">Back</button>
       </div>
     </div>
     <!-- on the game-over screen, below the board -->
     <button id="to-menu" hidden>Main menu</button>
-    <!-- shown over the game-over screen when a score makes the top 5 -->
+    <!-- shown over the game-over screen when a score makes this week's or the all-time top 10 -->
     <form id="hs-form" hidden>
       <input id="hs-name" maxlength="8" autocomplete="off" autocapitalize="words"
         spellcheck="false" placeholder="Your name" aria-label="Your name" />
