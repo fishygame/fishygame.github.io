@@ -48,8 +48,10 @@ to the fishygame org.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
-- A top-5 score asks for a name (up to 8 characters) for the global high score board. Each mode
-  and difficulty has its own board.
+- Each mode and difficulty has two global top-10 boards: this week (starts fresh every Monday, US
+  Eastern) and all time (only each name's best score, so one player can't fill it). A score that
+  makes either one asks for a name (up to 8 characters). The end screen shows both side by side,
+  or just one on a narrow screen; the High Scores menu switches between them.
 - M mutes all sound, and N (or the skip button in the corner) skips to the next song. The music
   starts on your first key press, click or tap. The Sound screen on the title menu picks the eating
   sound (a gulp, or the original burp) and which songs play, shuffled or in order, and plays any
@@ -85,16 +87,23 @@ fish colors, Speed mode scoring, and player speed/acceleration. What changes wit
 The board is the `fishy-high-scores` Lambda in AWS us-east-1, with a public function URL (set in
 `src/highscores.ts`) and the `fishy-high-scores` DynamoDB table. The Lambda checks names
 (length, characters and a bad-word filter), limits each IP to one score every 10 seconds, and
-keeps the top 5 of each mode and difficulty. Classic on Medium is the original board, item
-`board`; the others are `board#<mode>#<difficulty>` (e.g. `board#speed#hard`). Requests without a
+keeps the top 10 of each mode and difficulty, all time and this week. All time keeps only each
+name's best score (names match ignoring case); this week allows repeats. Classic on Medium's
+all-time board is the original one, item `board`; the others are `board#<mode>#<difficulty>`
+(e.g. `board#speed#hard`). This week's are `week#<Monday>#<mode>#<difficulty>` (e.g.
+`week#2026-11-02#speed#hard`, the Monday by US Eastern time) and expire a year later through the
+table's TTL on `expires`. GET returns `{ scores, weekly }`; POST returns `{ scores, rank, weekly,
+weeklyRank }`. Requests without a
 mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
 sends them. Speed boards also keep each game's time (`time`, whole seconds); scores saved
 before 2026-10-25's time update have none and show a dash. After editing `server/high-scores.mjs`, upload it with:
 
-```bash
-cp server/high-scores.mjs index.mjs && zip fn.zip index.mjs && rm index.mjs
-aws lambda update-function-code --function-name fishy-high-scores --zip-file fileb://fn.zip && rm fn.zip
+```powershell
+Copy-Item server/high-scores.mjs index.mjs; Compress-Archive index.mjs fn.zip -Force; Remove-Item index.mjs
+aws lambda update-function-code --function-name fishy-high-scores --zip-file fileb://fn.zip; Remove-Item fn.zip
 ```
+
+(Git Bash on this machine has no `zip`, hence PowerShell.)
 
 To wipe a board: `aws dynamodb delete-item --table-name fishy-high-scores --key '{"pk":{"S":"board"}}'`
 (or `board#speed#hard`, and so on)

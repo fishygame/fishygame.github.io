@@ -4,7 +4,19 @@ import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { Hook } from "./hook";
 import { Crab } from "./crab";
-import { BOARD_TITLE, type Entry, LOCAL, NAME_MAX, fetchScores, qualifies, submitScore } from "./highscores";
+import {
+  BOARD_TITLE,
+  type Boards,
+  type Entry,
+  LOCAL,
+  NAME_MAX,
+  PERIODS,
+  type Period,
+  type Saved,
+  fetchScores,
+  qualifies,
+  submitScore,
+} from "./highscores";
 import { TRACKS } from "./music";
 import { BLURB, DIFFICULTIES, DIFFICULTY, type Difficulty, LABEL, MODES, type Mode } from "./settings";
 
@@ -251,6 +263,8 @@ let time = 0;
 // what's picked on the title menu, remembered for next visit
 let mode: Mode = loadChoice("fishy-mode", MODES, "classic");
 let difficulty: Difficulty = loadChoice("fishy-difficulty", DIFFICULTIES, "medium");
+// which high score board the menu shows: this week's or all time
+let period: Period = loadChoice("fishy-score-period", PERIODS, "week");
 let tuning = DIFFICULTY[difficulty];
 let startedAt = 0;
 // Speed mode
@@ -286,7 +300,7 @@ function reset(): void {
   startedAt = time;
   combo = 0;
   timeBonus = 0;
-  myRank = -1;
+  myRanks = { week: -1, all: -1 };
   syncUI();
 }
 
@@ -372,7 +386,7 @@ function pick(kind: string, value: string): void {
   } catch {
     // not remembering it is fine
   }
-  board = null;
+  boards = null;
   syncPicks();
   if (!menu.querySelector<HTMLElement>('[data-screen="scores"]')!.hidden) loadMenuScores();
 }
@@ -386,14 +400,31 @@ function syncPicks(): void {
         ? mode
         : kind === "difficulty"
           ? difficulty
-          : kind === "eat"
-            ? sound.eatSound
-            : shuffle
-              ? "on"
-              : "off";
+          : kind === "period"
+            ? period
+            : kind === "eat"
+              ? sound.eatSound
+              : shuffle
+                ? "on"
+                : "off";
     b.setAttribute("aria-pressed", String(b.dataset.value === picked));
   }
   menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
+  menu.querySelector(".board-help")!.textContent =
+    period === "week" ? "Starts fresh every Monday." : LOCAL ? "" : "Each player's best score.";
+}
+
+/** Switch the menu's high scores between this week and all time. */
+function pickPeriod(value: string): void {
+  if (!PERIODS.includes(value as Period)) return;
+  period = value as Period;
+  try {
+    localStorage.setItem("fishy-score-period", value);
+  } catch {
+    // not remembering it is fine
+  }
+  syncPicks();
+  loadMenuScores();
 }
 
 // ---- sound choices ----
@@ -478,14 +509,14 @@ function boardName(): string {
   return `${LABEL[mode]} · ${LABEL[difficulty]}`;
 }
 
-/** The board for the current mode and difficulty, freshly fetched. Resolves to null if the
- * choice changes while it loads. */
-async function loadBoard(): Promise<Entry[] | null> {
+/** The boards for the current mode and difficulty, freshly fetched. Resolves to null if the
+ * choice changes while they load. */
+async function loadBoard(): Promise<Boards | null> {
   const [m, d] = [mode, difficulty];
-  const scores = await fetchScores({ mode: m, difficulty: d });
+  const fetched = await fetchScores({ mode: m, difficulty: d });
   if (m !== mode || d !== difficulty) return null;
-  board = scores;
-  return scores;
+  boards = fetched;
+  return fetched;
 }
 
 function moveMenuFocus(step: number): void {
@@ -502,16 +533,21 @@ function loadMenuScores(): void {
     li.textContent = text;
     menuScores.append(li);
   };
-  if (board) renderMenuScores(board);
+  const none = () => {
+    const thisWeek = period === "week" ? " this week" : "";
+    show(LOCAL ? `None yet${thisWeek}. Go set one!` : `None yet${thisWeek}. Be the first!`);
+  };
+  if (boards?.[period].length) renderMenuScores(boards[period]);
+  else if (boards) none();
   else show("Loading…");
   loadBoard()
-    .then((scores) => {
-      if (!scores) return; // picked another board meanwhile; that one's loading now
-      if (scores.length) renderMenuScores(scores);
-      else show(LOCAL ? "None yet. Go set one!" : "None yet. Be the first!");
+    .then((fetched) => {
+      if (!fetched) return; // picked another board meanwhile; that one's loading now
+      if (fetched[period].length) renderMenuScores(fetched[period]);
+      else none();
     })
     .catch(() => {
-      if (!board) show("Couldn't load the high scores");
+      if (!boards) show("Couldn't load the high scores");
     });
 }
 
@@ -547,6 +583,7 @@ menu.addEventListener("click", (e) => {
     applyMusic();
   } else if (button.dataset.play) sound.playSong(button.dataset.play);
   else if (kind === "eat") pickEatSound(button.dataset.value!);
+  else if (kind === "period") pickPeriod(button.dataset.value!);
   else if (kind === "shuffle") {
     shuffle = button.dataset.value === "on";
     applyMusic();
@@ -570,8 +607,9 @@ const form = document.getElementById("hs-form") as HTMLFormElement;
 const nameInput = document.getElementById("hs-name") as HTMLInputElement;
 const formError = document.getElementById("hs-error") as HTMLParagraphElement;
 const saveButton = form.querySelector("button[type=submit]") as HTMLButtonElement;
-let board: Entry[] | null = null; // null until it loads, or if it can't be reached
-let myRank = -1; // where the score you just saved landed, so it can be highlighted
+let boards: Boards | null = null; // null until they load, or if they can't be reached
+// where the score you just saved landed on each board, so it can be highlighted
+let myRanks: Record<Period, number> = { week: -1, all: -1 };
 let entering = false;
 // the last name (or initials) typed, so next time it's already filled in
 const NAME_KEY = LOCAL ? "fishy-initials" : "fishy-name";
@@ -617,9 +655,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const name = nameInput.value.trim();
     if (LOCAL && !name) throw new Error("Type your initials, or Skip");
-    const saved = await submitScore({ mode, difficulty }, name, score, scoreTime());
-    board = saved.scores;
-    myRank = saved.rank;
+    showSaved(await submitScore({ mode, difficulty }, name, score, scoreTime()));
     try {
       localStorage.setItem(NAME_KEY, name);
     } catch {
@@ -649,11 +685,13 @@ function skipForm(): void {
   closeForm();
   if (!LOCAL) return;
   submitScore({ mode, difficulty }, NO_INITIALS, score, scoreTime())
-    .then((saved) => {
-      board = saved.scores;
-      myRank = saved.rank;
-    })
+    .then(showSaved)
     .catch((err) => console.warn(err));
+}
+
+function showSaved(saved: Saved): void {
+  boards = saved.boards;
+  myRanks = saved.ranks;
 }
 
 // ---- spawning ----
@@ -1107,64 +1145,108 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  // with the board, everything moves up to make room; the name form (CSS) sits at H / 2 - 10
-  showBoard &&= board !== null;
-  const top = showBoard ? H / 2 - 150 : H / 2 - 30;
+  const took = mode === "speed" ? ` · ${clock(elapsed())}` : "";
+  const bonus = state === "won" && timeBonus ? ` (+${timeBonus.toLocaleString()} time bonus)` : "";
+  const scoreLine = `Score: ${score.toLocaleString()}${took}${bonus}`;
+  showBoard &&= boards !== null;
+
+  // typing a name: everything moves up, and the name form (CSS) sits at H / 2 - 10
+  if (showBoard && entering) {
+    const top = H / 2 - 150;
+    drawTitle(title, scoreLine, top);
+    ctx.font = "18px system-ui, sans-serif";
+    ctx.fillStyle = "#ffd166";
+    ctx.fillText(LOCAL ? "High score! Type your initials:" : "New high score! Type your name:", W / 2, top + 90);
+    ctx.restore();
+    return;
+  }
+  if (!showBoard) {
+    const top = H / 2 - 30;
+    drawTitle(title, scoreLine, top);
+    ctx.font = "18px system-ui, sans-serif";
+    ctx.fillText(subtitle, W / 2, top + 90);
+    ctx.restore();
+    if (gameOver()) toMenu.style.top = `${top + 120}px`;
+    return;
+  }
+
+  // This week and all time side by side when there's room; otherwise just one of them: all time if
+  // you made it, else this week.
+  const half = mode === "speed" ? 180 : 160;
+  const panels: Period[] = W >= 4 * half + 56 ? ["week", "all"] : [myRanks.all >= 0 ? "all" : "week"];
+  // Rows shrink to fit a short screen, down to a point; past that, only the top few (and yours) show.
+  const n = Math.max(1, ...panels.map((p) => boards![p].length));
+  const room = H - 24 - BOARD_EXTRA;
+  const rowH = Math.max(MIN_ROW_H, Math.min(ROW_H, room / n));
+  const rows = Math.max(1, Math.min(n, Math.floor(room / rowH)));
+  const top = Math.max(42, (H - BOARD_EXTRA - rows * rowH) / 2 + 30);
+  drawTitle(title, scoreLine, top);
+  ctx.font = "18px system-ui, sans-serif";
+  ctx.fillText(subtitle, W / 2, top + 90);
+  panels.forEach((p, i) => {
+    const cx = panels.length === 1 ? W / 2 : W / 2 + (i === 0 ? -1 : 1) * (half + 12);
+    drawBoard(p, cx, top + 140, half, rowH, rows);
+  });
+  ctx.restore();
+  toMenu.style.top = `${top + 140 + 24 + rows * rowH + 16}px`;
+}
+
+// The end screen from the title's top to the Main menu button's bottom, besides the board's rows.
+const BOARD_EXTRA = 254;
+const ROW_H = 28;
+const MIN_ROW_H = 20;
+
+function drawTitle(title: string, scoreLine: string, top: number): void {
   ctx.font = "bold 56px system-ui, sans-serif";
   ctx.fillText(title, W / 2, top);
   ctx.font = "24px system-ui, sans-serif";
-  const took = mode === "speed" ? ` · ${clock(elapsed())}` : "";
-  const bonus = state === "won" && timeBonus ? ` (+${timeBonus.toLocaleString()} time bonus)` : "";
-  ctx.fillText(`Score: ${score.toLocaleString()}${took}${bonus}`, W / 2, top + 50);
-  ctx.font = "18px system-ui, sans-serif";
-  if (showBoard && entering) {
-    ctx.fillStyle = "#ffd166";
-    ctx.fillText(LOCAL ? "Top 5 score! Type your initials:" : "New high score! Type your name:", W / 2, top + 90);
-  } else {
-    ctx.fillText(subtitle, W / 2, top + 90);
-    if (showBoard) drawBoard(top + 140);
-  }
-  ctx.restore();
+  ctx.fillText(scoreLine, W / 2, top + 50);
 }
 
-function drawBoard(y: number): void {
+/** One board, centered on cx with its heading at y, showing up to `rows` rows. If yours is below
+ * those, it takes the last one. */
+function drawBoard(period: Period, cx: number, y: number, half: number, rowH: number, rows: number): void {
+  const list = boards![period];
+  const mine = myRanks[period];
+  let shown = list.slice(0, rows).map((entry, i) => ({ entry, i }));
+  if (mine >= rows) shown = [...shown.slice(0, rows - 1), { entry: list[mine], i: mine }];
   // Speed boards have a column for each game's time, so they're a little wider
   const speed = mode === "speed";
-  const half = speed ? 180 : 160;
   // a panel behind it, so fish swimming past don't make it hard to read
   ctx.save();
   ctx.shadowColor = "transparent";
   ctx.fillStyle = "rgba(0, 20, 40, 0.55)";
   ctx.beginPath();
-  ctx.roundRect(W / 2 - half, y - 24, half * 2, 48 + Math.max(1, board!.length) * 28, 12);
+  ctx.roundRect(cx - half, y - 24, half * 2, 48 + Math.max(1, shown.length) * rowH, 12);
   ctx.fill();
   ctx.restore();
 
   ctx.font = "bold 18px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
-  let heading = `${BOARD_TITLE} · ${boardName()}`;
-  if (LOCAL && myRank === 0) heading = "New best score!";
-  else if (LOCAL && myRank > 0) heading = "You made your top 5!";
-  ctx.fillText(heading, W / 2, y);
-  if (!board!.length) {
+  let heading = `${period === "week" ? "This week" : "All time"} · ${boardName()}`;
+  if (LOCAL && period === "all" && mine === 0) heading = "New best score!";
+  else if (LOCAL && period === "all" && mine > 0) heading = "You made your top 10!";
+  ctx.fillText(heading, cx, y);
+  if (!list.length) {
     ctx.fillStyle = "#fff";
     ctx.font = "18px system-ui, sans-serif";
-    ctx.fillText("None yet!", W / 2, y + 32);
+    ctx.fillText("None yet!", cx, y + 32);
   }
-  board!.forEach((entry, i) => {
-    const rowY = y + 32 + i * 28;
-    ctx.font = "20px system-ui, sans-serif";
-    ctx.fillStyle = i === myRank ? "#ffd166" : "#fff";
+  const size = Math.round(8 + (rowH * 3) / 7); // 20px on full-size rows
+  shown.forEach(({ entry, i }, row) => {
+    const rowY = y + 32 + row * rowH;
+    ctx.font = `${size}px system-ui, sans-serif`;
+    ctx.fillStyle = i === mine ? "#ffd166" : "#fff";
     ctx.textAlign = "right";
-    ctx.fillText(`${i + 1}.`, W / 2 - half + 60, rowY);
+    ctx.fillText(`${i + 1}.`, cx - half + 60, rowY);
     ctx.textAlign = "left";
-    ctx.fillText(entry.name, W / 2 - half + 72, rowY);
+    ctx.fillText(entry.name, cx - half + 72, rowY);
     ctx.textAlign = "right";
-    ctx.fillText(entry.score.toLocaleString(), W / 2 + half - 30, rowY);
+    ctx.fillText(entry.score.toLocaleString(), cx + half - 30, rowY);
     if (speed) {
-      ctx.font = "16px system-ui, sans-serif";
+      ctx.font = `${size - 4}px system-ui, sans-serif`;
       ctx.globalAlpha = 0.75;
-      ctx.fillText(boardTime(entry), W / 2 + 60, rowY);
+      ctx.fillText(boardTime(entry), cx + 60, rowY);
       ctx.globalAlpha = 1;
     }
   });

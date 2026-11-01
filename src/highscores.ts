@@ -1,8 +1,10 @@
-// Top-5 high score boards, one for each mode and difficulty. Two flavors, picked at build time
-// with VITE_SCORE_BOARD:
+// Top-10 high score boards, one for each mode and difficulty, each kept both for all time and for
+// this week (starting fresh every Monday). Two flavors, picked at build time with VITE_SCORE_BOARD:
 //   "global" (the default): shared boards kept by a small AWS Lambda (see server/high-scores.mjs);
-//            a top-5 score asks for a name.
-//   "local":  each player's own best scores, kept in their browser under their initials.
+//            a score that makes either board asks for a name. All time keeps only each name's best
+//            score, so one player can't fill it.
+//   "local":  each player's own best scores, kept in their browser under their initials. Repeats
+//            are fine here, since it's usually one person's board.
 
 import type { Difficulty, Mode } from "./settings";
 
@@ -12,7 +14,7 @@ export const BOARD_TITLE = LOCAL ? "Your best scores" : "High scores";
 const API = "https://kmyhjk6d7e2hk4rbotynrnxdt40ocefq.lambda-url.us-east-1.on.aws/";
 const STORAGE_KEY = "fishy-best-scores";
 export const NAME_MAX = LOCAL ? 3 : 8;
-const TOP = 5;
+const TOP = 10;
 
 /** Which board: Classic on Medium is the original one, so it keeps its old storage key. */
 export interface Board {
@@ -20,26 +22,34 @@ export interface Board {
   difficulty: Difficulty;
 }
 
+export type Period = "week" | "all";
+export const PERIODS: Period[] = ["week", "all"];
+
 export interface Entry {
   name: string; // the player's name, or initials on a local board
   score: number;
   time?: number; // Speed boards: how long the game took, in whole seconds
 }
 
-export async function fetchScores(board: Board): Promise<Entry[]> {
-  if (LOCAL) return loadLocal(board);
-  const res = await fetch(`${API}?mode=${board.mode}&difficulty=${board.difficulty}`);
-  if (!res.ok) throw new Error(`couldn't load high scores (${res.status})`);
-  return (await res.json()).scores;
+/** A mode and difficulty's two boards. */
+export type Boards = Record<Period, Entry[]>;
+
+/** What saving a score did: the boards now, and where it landed on each (-1 if it missed out). */
+export interface Saved {
+  boards: Boards;
+  ranks: Record<Period, number>;
 }
 
-/** Save a score. Resolves to the new board and where it landed; rejects with a message to show. */
-export async function submitScore(
-  board: Board,
-  name: string,
-  score: number,
-  time?: number,
-): Promise<{ scores: Entry[]; rank: number }> {
+export async function fetchScores(board: Board): Promise<Boards> {
+  if (LOCAL) return { week: loadLocal(board, "week"), all: loadLocal(board, "all") };
+  const res = await fetch(`${API}?mode=${board.mode}&difficulty=${board.difficulty}`);
+  if (!res.ok) throw new Error(`couldn't load high scores (${res.status})`);
+  const body = await res.json();
+  return { week: body.weekly ?? [], all: body.scores };
+}
+
+/** Save a score to both boards. Rejects with a message to show. */
+export async function submitScore(board: Board, name: string, score: number, time?: number): Promise<Saved> {
   if (LOCAL) return saveLocal(board, name, score, time);
   let res: Response;
   try {
@@ -53,37 +63,57 @@ export async function submitScore(
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? "Something went wrong, try again");
-  return body;
+  return {
+    boards: { week: body.weekly ?? [], all: body.scores },
+    ranks: { week: body.weeklyRank ?? -1, all: body.rank },
+  };
 }
 
-/** Whether a score would make the board. */
-export function qualifies(scores: Entry[], score: number): boolean {
-  return score > 0 && (scores.length < TOP || score > scores[TOP - 1].score);
+/** Whether a score would make either board. */
+export function qualifies(boards: Boards, score: number): boolean {
+  return score > 0 && PERIODS.some((p) => boards[p].length < TOP || score > boards[p][TOP - 1].score);
+}
+
+/** The Monday that starts this week, as YYYY-MM-DD, by this device's clock. */
+function weekStart(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // ---- local board ----
+// All time is saved as a list of entries (as before weekly boards); this week as { week, scores },
+// so last week's scores are simply dropped when a new week comes around.
 
-function storageKey({ mode, difficulty }: Board): string {
-  return mode === "classic" && difficulty === "medium" ? STORAGE_KEY : `${STORAGE_KEY}-${mode}-${difficulty}`;
+function storageKey({ mode, difficulty }: Board, period: Period): string {
+  const key = mode === "classic" && difficulty === "medium" ? STORAGE_KEY : `${STORAGE_KEY}-${mode}-${difficulty}`;
+  return period === "week" ? `${key}-week` : key;
 }
 
-function loadLocal(board: Board): Entry[] {
+function loadLocal(board: Board, period: Period): Entry[] {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey(board)) ?? "[]");
+    let saved = JSON.parse(localStorage.getItem(storageKey(board, period)) ?? "[]");
+    if (period === "week") saved = saved?.week === weekStart() ? saved.scores : [];
     return Array.isArray(saved) ? saved.filter((e) => typeof e?.score === "number").slice(0, TOP) : [];
   } catch {
     return []; // storage blocked or garbled: start fresh
   }
 }
 
-function saveLocal(board: Board, name: string, score: number, time?: number): { scores: Entry[]; rank: number } {
+function saveLocal(board: Board, name: string, score: number, time?: number): Saved {
   const entry: Entry = time === undefined ? { name, score } : { name, score, time };
-  // ties go to whoever got there first
-  const scores = [...loadLocal(board), entry].sort((a, b) => b.score - a.score).slice(0, TOP);
-  try {
-    localStorage.setItem(storageKey(board), JSON.stringify(scores));
-  } catch {
-    // can't save (private window, say); it still shows for this visit
+  const result: Saved = { boards: { week: [], all: [] }, ranks: { week: -1, all: -1 } };
+  for (const period of PERIODS) {
+    // ties go to whoever got there first
+    const scores = [...loadLocal(board, period), entry].sort((a, b) => b.score - a.score).slice(0, TOP);
+    try {
+      const saved = period === "week" ? { week: weekStart(), scores } : scores;
+      localStorage.setItem(storageKey(board, period), JSON.stringify(saved));
+    } catch {
+      // can't save (private window, say); it still shows for this visit
+    }
+    result.boards[period] = scores;
+    result.ranks[period] = scores.indexOf(entry);
   }
-  return { scores, rank: scores.indexOf(entry) };
+  return result;
 }

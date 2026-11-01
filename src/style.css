@@ -91,6 +91,11 @@ canvas {
   gap: 12px;
 }
 
+/* ten rows, so a little tighter than other lists */
+#menu ol li + li {
+  margin-top: 1px;
+}
+
 /* Speed boards: each game's time, just left of the score */
 #menu ol li .time {
   margin-left: auto;
@@ -156,6 +161,14 @@ canvas {
   min-height: 2.6em;
   font-size: 15px;
   line-height: 1.3;
+  opacity: 0.85;
+}
+
+/* under the high scores' This week / All time choice */
+#menu .board-help {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 15px;
   opacity: 0.85;
 }
 
@@ -247,7 +260,7 @@ canvas {
 #to-menu {
   position: fixed;
   left: 50%;
-  top: calc(50% + 172px);
+  top: calc(50% + 172px); /* the game moves it to just below the board */
   transform: translateX(-50%);
   font-family: system-ui, sans-serif;
   font-size: 18px;

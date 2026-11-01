@@ -1,8 +1,10 @@
-// High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 5 of each game
-// mode and difficulty in DynamoDB.
-//   GET  ?mode=&difficulty= -> { scores: [{ name, score }] }
-//   POST { name, score, mode, difficulty, time } -> { scores, rank } (rank is the new entry's index,
-//        or -1 if it missed out)
+// High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 10 of each game
+// mode and difficulty in DynamoDB, both all time and for this week.
+//   GET  ?mode=&difficulty= -> { scores: [{ name, score }], weekly: [...] }
+//   POST { name, score, mode, difficulty, time } -> { scores, rank, weekly, weeklyRank } (a rank is
+//        the new entry's index on that board, or -1 if it missed out)
+// `scores` is the all-time board, which keeps only each name's best score so one player can't fill
+// it. The weekly board allows repeats and starts fresh every Monday, US Eastern time.
 // Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
 // have none.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
@@ -15,7 +17,9 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dyn
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE = process.env.TABLE;
 
-const TOP = 5;
+const TOP = 10;
+const WEEK_TTL = 365 * 86400; // old weeks expire (the table's TTL is on `expires`)
+const ZONE = "America/New_York";
 const NAME_MAX = 8;
 const MAX_SCORE = 1_000_000; // far beyond a real game; anything bigger is someone poking the API
 const MAX_TIME = 3600; // seconds; likewise
@@ -60,11 +64,40 @@ function json(statusCode, body) {
   return { statusCode, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }
 
-/** The board's key, or null for a mode or difficulty that doesn't exist. Classic on Medium keeps
- * the original board's key, so its scores carried over. */
-function boardKey(mode = "classic", difficulty = "medium") {
+/** The boards' keys, or null for a mode or difficulty that doesn't exist. Classic on Medium keeps
+ * the original board's key for all time, so its scores carried over. */
+function boardKeys(mode = "classic", difficulty = "medium") {
   if (!MODES.includes(mode) || !DIFFICULTIES.includes(difficulty)) return null;
-  return mode === "classic" && difficulty === "medium" ? "board" : `board#${mode}#${difficulty}`;
+  const all = mode === "classic" && difficulty === "medium" ? "board" : `board#${mode}#${difficulty}`;
+  return { all, week: `week#${weekStart()}#${mode}#${difficulty}` };
+}
+
+/** The Monday that starts this week, as YYYY-MM-DD, by the clock in Georgia. */
+export function weekStart(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(now)
+    .split("-")
+    .map(Number);
+  const day = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  return day.toISOString().slice(0, 10);
+}
+
+const byScore = (a, b) => b.score - a.score; // a stable sort, so ties go to whoever got there first
+
+/** All time: each name's best score only (names match ignoring case), top 10. */
+function rankAllTime(scores) {
+  const best = new Map();
+  for (const e of scores) {
+    const key = e.name.toLowerCase();
+    if (!best.has(key) || e.score > best.get(key).score) best.set(key, e);
+  }
+  return [...best.values()].sort(byScore).slice(0, TOP);
+}
+
+/** This week: repeats allowed, top 10. */
+function rankWeekly(scores) {
+  return [...scores].sort(byScore).slice(0, TOP);
 }
 
 async function getBoard(pk) {
@@ -99,8 +132,8 @@ async function submit(event) {
   } catch {
     return json(400, { error: "Bad request" });
   }
-  const pk = boardKey(body.mode, body.difficulty);
-  if (!pk) return json(400, { error: "Bad game mode" });
+  const keys = boardKeys(body.mode, body.difficulty);
+  if (!keys) return json(400, { error: "Bad game mode" });
   const name = cleanName(body.name);
   const score = body.score;
   if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) return json(400, { error: "Bad score" });
@@ -114,29 +147,43 @@ async function submit(event) {
   const ip = event.requestContext?.http?.sourceIp ?? "unknown";
   if (!(await claimCooldown(ip))) return json(429, { error: "Slow down a little and try again" });
 
-  // read-modify-write with a version check, retrying if two scores land at once
+  const entry = { name, score, ...(time !== undefined && { time }), at: new Date().toISOString() };
+  const all = await place(keys.all, entry, rankAllTime);
+  if (!all) return json(503, { error: "Busy, try again" });
+  const week = await place(keys.week, entry, rankWeekly, Math.floor(Date.now() / 1000) + WEEK_TTL);
+  if (!week) return json(503, { error: "Busy, try again" });
+  return json(200, {
+    scores: all.scores.map(publicEntry),
+    rank: all.rank,
+    weekly: week.scores.map(publicEntry),
+    weeklyRank: week.rank,
+  });
+}
+
+/** Add an entry to one board: read-modify-write with a version check, retrying if two scores land
+ * at once. Resolves to the board and the entry's place on it (-1 if it missed out), or null if it
+ * stayed too busy. */
+async function place(pk, entry, rank, expires) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const board = await getBoard(pk);
-    const entry = { name, score, ...(time !== undefined && { time }), at: new Date().toISOString() };
-    // ties go to whoever got there first
-    const scores = [...board.scores, entry].sort((a, b) => b.score - a.score).slice(0, TOP);
-    const rank = scores.indexOf(entry);
-    if (rank === -1) return json(200, { scores: board.scores.map(publicEntry), rank });
+    const scores = rank([...board.scores, entry]);
+    const at = scores.indexOf(entry);
+    if (at === -1) return { scores: rank(board.scores), rank: -1 };
     try {
       await db.send(
         new PutCommand({
           TableName: TABLE,
-          Item: { pk, scores, version: board.version + 1 },
+          Item: { pk, scores, version: board.version + 1, ...(expires && { expires }) },
           ConditionExpression: "attribute_not_exists(pk) OR version = :v",
           ExpressionAttributeValues: { ":v": board.version },
         }),
       );
-      return json(200, { scores: scores.map(publicEntry), rank });
+      return { scores, rank: at };
     } catch (err) {
       if (err.name !== "ConditionalCheckFailedException") throw err;
     }
   }
-  return json(503, { error: "Busy, try again" });
+  return null;
 }
 
 function publicEntry({ name, score, time }) {
@@ -147,9 +194,13 @@ export const handler = async (event) => {
   const method = event.requestContext?.http?.method;
   if (method === "GET") {
     const query = event.queryStringParameters ?? {};
-    const pk = boardKey(query.mode, query.difficulty);
-    if (!pk) return json(400, { error: "Bad game mode" });
-    return json(200, { scores: (await getBoard(pk)).scores.map(publicEntry) });
+    const keys = boardKeys(query.mode, query.difficulty);
+    if (!keys) return json(400, { error: "Bad game mode" });
+    const [all, week] = await Promise.all([getBoard(keys.all), getBoard(keys.week)]);
+    return json(200, {
+      scores: rankAllTime(all.scores).map(publicEntry),
+      weekly: rankWeekly(week.scores).map(publicEntry),
+    });
   }
   if (method === "POST") return submit(event);
   return json(405, { error: "Method not allowed" });
