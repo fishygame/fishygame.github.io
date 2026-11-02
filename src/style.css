@@ -79,7 +79,7 @@ canvas {
   margin: 0 auto 8px;
   padding: 0;
   width: 100%;
-  max-width: 280px;
+  max-width: 360px;
   list-style: none;
   font-size: 20px;
 }
@@ -96,13 +96,49 @@ canvas {
   margin-top: 1px;
 }
 
-/* Speed boards: each game's time, just left of the score */
+/* each row: rank and name, how the game ended, the time (Speed), the score */
+#menu ol li .name {
+  flex: 0 0 6.6em;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#menu ol li .end {
+  flex: 1;
+  text-align: left;
+  font-size: 15px;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+#menu ol li .end.won {
+  font-weight: bold;
+}
+
 #menu ol li .time {
-  margin-left: auto;
-  min-width: 3em;
+  min-width: 2.6em;
   text-align: right;
-  font-size: 16px;
+  font-size: 15px;
   opacity: 0.75;
+}
+
+#menu ol li .points {
+  text-align: right;
+}
+
+/* a phone held upright: smaller rows so everything fits */
+@media (max-width: 440px) {
+  #menu ol {
+    font-size: 17px;
+  }
+  #menu ol li {
+    gap: 8px;
+  }
+  #menu ol li .end,
+  #menu ol li .time {
+    font-size: 13px;
+  }
 }
 
 #menu button,

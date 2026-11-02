@@ -24,10 +24,23 @@ export interface Board {
 export type Period = "week" | "all";
 export const PERIODS: Period[] = ["week", "all"];
 
+/** How a game ended: you won, or what got you. */
+export type End = "won" | "shark" | "fish" | "hook" | "crab";
+
+/** What the boards say for each ending. */
+export const END_LABEL: Record<End, string> = {
+  won: "BIG FISH",
+  shark: "Shark bait",
+  fish: "Fish food",
+  hook: "Hooked",
+  crab: "Crab snack",
+};
+
 export interface Entry {
   name: string; // the player's name, or initials on a local board
   score: number;
   time?: number; // Speed boards: how long the game took, in whole seconds
+  end?: End; // scores saved before 2026-11-02 have none
 }
 
 /** A mode and difficulty's two boards. */
@@ -48,14 +61,20 @@ export async function fetchScores(board: Board): Promise<Boards> {
 }
 
 /** Save a score to both boards. Rejects with a message to show. */
-export async function submitScore(board: Board, name: string, score: number, time?: number): Promise<Saved> {
-  if (LOCAL) return saveLocal(board, name, score, time);
+export async function submitScore(
+  board: Board,
+  name: string,
+  score: number,
+  end: End,
+  time?: number,
+): Promise<Saved> {
+  if (LOCAL) return saveLocal(board, name, score, end, time);
   let res: Response;
   try {
     res = await fetch(API, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, score, time, mode: board.mode, difficulty: board.difficulty }),
+      body: JSON.stringify({ name, score, time, end, mode: board.mode, difficulty: board.difficulty }),
     });
   } catch {
     throw new Error("Couldn't reach the high score board");
@@ -99,8 +118,8 @@ function loadLocal(board: Board, period: Period): Entry[] {
   }
 }
 
-function saveLocal(board: Board, name: string, score: number, time?: number): Saved {
-  const entry: Entry = time === undefined ? { name, score } : { name, score, time };
+function saveLocal(board: Board, name: string, score: number, end: End, time?: number): Saved {
+  const entry: Entry = time === undefined ? { name, score, end } : { name, score, time, end };
   const result: Saved = { boards: { week: [], all: [] }, ranks: { week: -1, all: -1 } };
   for (const period of PERIODS) {
     // ties go to whoever got there first

@@ -7,6 +7,8 @@ import { Crab } from "./crab";
 import {
   BOARD_TITLE,
   type Boards,
+  END_LABEL,
+  type End,
   type Entry,
   LOCAL,
   NAME_MAX,
@@ -556,10 +558,15 @@ function renderMenuScores(scores: Entry[]): void {
   scores.forEach((entry, i) => {
     const li = document.createElement("li");
     const name = document.createElement("span");
+    name.className = "name";
     name.textContent = `${i + 1}. ${entry.name}`; // textContent, so names can't inject markup
+    const end = document.createElement("span");
+    end.className = entry.end === "won" ? "end won" : "end";
+    end.textContent = entry.end ? END_LABEL[entry.end] : "";
     const points = document.createElement("span");
+    points.className = "points";
     points.textContent = entry.score.toLocaleString();
-    li.append(name);
+    li.append(name, end);
     if (mode === "speed") {
       const took = document.createElement("span");
       took.className = "time";
@@ -655,7 +662,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const name = nameInput.value.trim();
     if (LOCAL && !name) throw new Error("Type your initials, or Skip");
-    showSaved(await submitScore({ mode, difficulty }, name, score, scoreTime()));
+    showSaved(await submitScore({ mode, difficulty }, name, score, ending(), scoreTime()));
     try {
       localStorage.setItem(NAME_KEY, name);
     } catch {
@@ -675,6 +682,14 @@ function scoreTime(): number | undefined {
   return mode === "speed" ? Math.floor(elapsed()) : undefined;
 }
 
+/** How the game that just finished ended. */
+function ending(): End {
+  if (state === "won") return "won";
+  if (hooked) return "hook";
+  if (pinched) return "crab";
+  return killer?.kind === "shark" ? "shark" : "fish";
+}
+
 /** A Speed board entry's time, or a dash for scores saved before times were kept. */
 function boardTime(entry: Entry): string {
   return entry.time === undefined ? "—" : clock(entry.time);
@@ -684,7 +699,7 @@ function boardTime(entry: Entry): string {
 function skipForm(): void {
   closeForm();
   if (!LOCAL) return;
-  submitScore({ mode, difficulty }, NO_INITIALS, score, scoreTime())
+  submitScore({ mode, difficulty }, NO_INITIALS, score, ending(), scoreTime())
     .then(showSaved)
     .catch((err) => console.warn(err));
 }
@@ -1172,7 +1187,7 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
 
   // This week and all time side by side when there's room; otherwise just one of them: all time if
   // you made it, else this week.
-  const half = mode === "speed" ? 180 : 160;
+  const half = boardHalf();
   const panels: Period[] = W >= 4 * half + 56 ? ["week", "all"] : [myRanks.all >= 0 ? "all" : "week"];
   // Rows shrink to fit a short screen, down to a point; past that, only the top few (and yours) show.
   const n = Math.max(1, ...panels.map((p) => boards![p].length));
@@ -1189,6 +1204,12 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   });
   ctx.restore();
   toMenu.style.top = `${top + 140 + 24 + rows * rowH + 16}px`;
+}
+
+/** Half a board's width on the end screen: room for the rank, name, ending and score, and on
+ * Speed boards the time too. */
+function boardHalf(): number {
+  return Math.min(mode === "speed" ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
 }
 
 // The end screen from the title's top to the Main menu button's bottom, besides the board's rows.
@@ -1210,8 +1231,8 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
   const mine = myRanks[period];
   let shown = list.slice(0, rows).map((entry, i) => ({ entry, i }));
   if (mine >= rows) shown = [...shown.slice(0, rows - 1), { entry: list[mine], i: mine }];
-  // Speed boards have a column for each game's time, so they're a little wider
   const speed = mode === "speed";
+  const left = cx - half;
   // a panel behind it, so fish swimming past don't make it hard to read
   ctx.save();
   ctx.shadowColor = "transparent";
@@ -1238,17 +1259,23 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
     ctx.font = `${size}px system-ui, sans-serif`;
     ctx.fillStyle = i === mine ? "#ffd166" : "#fff";
     ctx.textAlign = "right";
-    ctx.fillText(`${i + 1}.`, cx - half + 60, rowY);
+    ctx.fillText(`${i + 1}.`, left + 46, rowY);
     ctx.textAlign = "left";
-    ctx.fillText(entry.name, cx - half + 72, rowY);
+    ctx.fillText(entry.name, left + 56, rowY, 98); // squeezed if it would run into the ending
     ctx.textAlign = "right";
-    ctx.fillText(entry.score.toLocaleString(), cx + half - 30, rowY);
-    if (speed) {
-      ctx.font = `${size - 4}px system-ui, sans-serif`;
-      ctx.globalAlpha = 0.75;
-      ctx.fillText(boardTime(entry), cx + 60, rowY);
-      ctx.globalAlpha = 1;
+    ctx.fillText(entry.score.toLocaleString(), left + half * 2 - 20, rowY);
+    ctx.font = `${size - 4}px system-ui, sans-serif`;
+    ctx.globalAlpha = 0.8;
+    const timeX = left + half * 2 - 108;
+    if (speed) ctx.fillText(boardTime(entry), timeX, rowY);
+    if (entry.end) {
+      ctx.textAlign = "left";
+      if (entry.end === "won") ctx.font = `bold ${size - 4}px system-ui, sans-serif`;
+      // squeezed if it would run into the time or score (a narrow board)
+      const room = (speed ? timeX - 40 : left + half * 2 - 100) - (left + 166);
+      ctx.fillText(END_LABEL[entry.end], left + 160, rowY, Math.min(96, room));
     }
+    ctx.globalAlpha = 1;
   });
   ctx.textAlign = "center";
 }

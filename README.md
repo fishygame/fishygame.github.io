@@ -52,6 +52,8 @@ to the fishygame org.
   Eastern) and all time. Both allow repeats, so one player can hold every place. A score that
   makes either one asks for a name (up to 8 characters). The end screen shows both side by side,
   or just one on a narrow screen; the High Scores menu switches between them.
+- Each score also shows how that game ended: BIG FISH (won), Shark bait, Fish food (a bigger
+  fish), Hooked or Crab snack. Scores from before 2026-11-02 have no ending and show none.
 - M mutes all sound, and N (or the skip button in the corner) skips to the next song. The music
   starts on your first key press, click or tap. The Sound screen on the title menu picks the eating
   sound (a gulp, or the original burp) and which songs play, shuffled or in order, and plays any
@@ -95,7 +97,7 @@ table's TTL on `expires`. GET returns `{ scores, weekly }`; POST returns `{ scor
 weeklyRank }`. Requests without a
 mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
 sends them. Speed boards also keep each game's time (`time`, whole seconds); scores saved
-before 2026-10-25's time update have none and show a dash. After editing `server/high-scores.mjs`, upload it with:
+before 2026-10-25's time update have none and show a dash. Every score keeps how the game ended (`end`: `won`, `shark`, `fish`, `hook` or `crab`; anything else gets a 400), shown with the labels in `END_LABEL` in `src/highscores.ts`. After editing `server/high-scores.mjs`, upload it with:
 
 ```powershell
 Copy-Item server/high-scores.mjs index.mjs; Compress-Archive index.mjs fn.zip -Force; Remove-Item index.mjs

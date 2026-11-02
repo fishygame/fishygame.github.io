@@ -1,10 +1,12 @@
 // High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 10 of each game
 // mode and difficulty in DynamoDB, both all time and for this week.
 //   GET  ?mode=&difficulty= -> { scores: [{ name, score }], weekly: [...] }
-//   POST { name, score, mode, difficulty, time } -> { scores, rank, weekly, weeklyRank } (a rank is
+//   POST { name, score, mode, difficulty, time, end } -> { scores, rank, weekly, weeklyRank } (a rank is
 //        the new entry's index on that board, or -1 if it missed out)
 // `scores` is the all-time board. The weekly board starts fresh every Monday, US Eastern time. Both
 // allow repeats: a player with the ten best scores gets all ten places.
+// Every score also keeps how the game ended (`end`: won, shark, fish, hook or crab); scores saved
+// before 2026-11-02 have none.
 // Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
 // have none.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
@@ -26,6 +28,7 @@ const MAX_TIME = 3600; // seconds; likewise
 const COOLDOWN = 10; // seconds between submissions from the same IP
 const MODES = ["classic", "speed"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
+const ENDS = ["won", "shark", "fish", "hook", "crab"]; // you won, or what got you
 
 // Matched anywhere in the name, after undoing l33t-speak and repeated letters.
 const BLOCKED_ANYWHERE = [
@@ -131,11 +134,13 @@ async function submit(event) {
   if (time !== undefined && (!Number.isInteger(time) || time < 0 || time > MAX_TIME)) {
     return json(400, { error: "Bad time" });
   }
+  const end = body.end;
+  if (end !== undefined && !ENDS.includes(end)) return json(400, { error: "Bad ending" });
 
   const ip = event.requestContext?.http?.sourceIp ?? "unknown";
   if (!(await claimCooldown(ip))) return json(429, { error: "Slow down a little and try again" });
 
-  const entry = { name, score, ...(time !== undefined && { time }), at: new Date().toISOString() };
+  const entry = { name, score, ...(time !== undefined && { time }), ...(end && { end }), at: new Date().toISOString() };
   const all = await place(keys.all, entry);
   if (!all) return json(503, { error: "Busy, try again" });
   const week = await place(keys.week, entry, Math.floor(Date.now() / 1000) + WEEK_TTL);
@@ -174,8 +179,8 @@ async function place(pk, entry, expires) {
   return null;
 }
 
-function publicEntry({ name, score, time }) {
-  return time === undefined ? { name, score } : { name, score, time };
+function publicEntry({ name, score, time, end }) {
+  return { name, score, ...(time !== undefined && { time }), ...(end && { end }) };
 }
 
 export const handler = async (event) => {
