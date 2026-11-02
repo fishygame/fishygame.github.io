@@ -376,7 +376,10 @@ function showMenu(): void {
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
   if (name === "scores") loadMenuScores();
-  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]`)?.focus();
+  // Focus the screen's first menu button without jumping to it: on the Sound screen that's Back,
+  // below the song list, and the menu should still open at the top.
+  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]`)?.focus({ preventScroll: true });
+  menu.scrollTop = 0;
 }
 
 /** Pick a mode or difficulty on the menu. The high scores shown switch to its board. */
