@@ -18,7 +18,7 @@ Eat smaller fish, steer clear of bigger ones, and grow until you're the biggest 
 - Touch: drag anywhere to swim. Buttons in the corner pause, skip the song and mute.
 - Pick your songs, shuffled or in order, and gulp or burp, on the Sound screen.
 
-Your ten best scores for each mode and difficulty are saved in your browser with your initials, all time and for this week (it starts fresh every Monday), so you're always chasing your own record.
+Your ten best scores for each mode and difficulty are saved in your browser with your initials, all time and for this week (it starts fresh every Monday), so you're always chasing your own record. Sharing a device? Player best shows each set of initials' top score.
 
 **Credits**
 

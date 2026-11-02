@@ -48,10 +48,12 @@ to the fishygame org.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
-- Each mode and difficulty has two global top-10 boards: this week (starts fresh every Monday, US
-  Eastern) and all time. Both allow repeats, so one player can hold every place. A score that
-  makes either one asks for a name (up to 8 characters). The end screen shows both side by side,
-  or just one on a narrow screen; the High Scores menu switches between them.
+- Each mode and difficulty has three global top-10 boards: this week (starts fresh every Monday,
+  US Eastern), all time, and player best (each name's best score only, matching names whatever
+  the capitals). This week and all time allow repeats, so one player can hold every place. A
+  score that makes any of them asks for a name (up to 8 characters). The end screen shows this
+  week and all time side by side (player best in place of all time if that's the only other one
+  you made), or just one on a narrow screen; the High Scores menu switches between all three.
 - Each score also shows how that game ended: BIG FISH (won), Shark bait, Fish food (a bigger
   fish), Hooked or Crab snack. Scores from before 2026-11-02 have no ending and show none.
 - M mutes all sound, and N (or the skip button in the corner) skips to the next song. The music
@@ -89,12 +91,14 @@ fish colors, Speed mode scoring, and player speed/acceleration. What changes wit
 The board is the `fishy-high-scores` Lambda in AWS us-east-1, with a public function URL (set in
 `src/highscores.ts`) and the `fishy-high-scores` DynamoDB table. The Lambda checks names
 (length, characters and a bad-word filter), limits each IP to one score every 10 seconds, and
-keeps the top 10 of each mode and difficulty, all time and this week, repeats allowed. Classic on Medium's
+keeps the top 10 of each mode and difficulty: all time and this week, repeats allowed, and player best. Classic on Medium's
 all-time board is the original one, item `board`; the others are `board#<mode>#<difficulty>`
 (e.g. `board#speed#hard`). This week's are `week#<Monday>#<mode>#<difficulty>` (e.g.
 `week#2026-11-02#speed#hard`, the Monday by US Eastern time) and expire a year later through the
-table's TTL on `expires`. GET returns `{ scores, weekly }`; POST returns `{ scores, rank, weekly,
-weeklyRank }`. Requests without a
+table's TTL on `expires`. Player best is `players#<mode>#<difficulty>` (Classic on Medium too), the
+top 10 names by their best score; until a board's first save it's made on the fly from the
+all-time and weekly boards. GET returns `{ scores, weekly, players }`; POST returns `{ scores,
+rank, weekly, weeklyRank, players, playerRank }`. Requests without a
 mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
 sends them. Speed boards also keep each game's time (`time`, whole seconds); scores saved
 before 2026-10-25's time update have none and show a dash. Every score keeps how the game ended (`end`: `won`, `shark`, `fish`, `hook` or `crab`; anything else gets a 400), shown with the labels in `END_LABEL` in `src/highscores.ts`. After editing `server/high-scores.mjs`, upload it with:

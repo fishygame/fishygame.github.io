@@ -13,6 +13,7 @@ import {
   LOCAL,
   NAME_MAX,
   PERIODS,
+  PERIOD_LABEL,
   type Period,
   type Saved,
   fetchScores,
@@ -265,7 +266,7 @@ let time = 0;
 // what's picked on the title menu, remembered for next visit
 let mode: Mode = loadChoice("fishy-mode", MODES, "classic");
 let difficulty: Difficulty = loadChoice("fishy-difficulty", DIFFICULTIES, "medium");
-// which high score board the menu shows: this week's or all time
+// which high score board the menu shows: this week's, all time or player best
 let period: Period = loadChoice("fishy-score-period", PERIODS, "week");
 let tuning = DIFFICULTY[difficulty];
 let startedAt = 0;
@@ -302,7 +303,7 @@ function reset(): void {
   startedAt = time;
   combo = 0;
   timeBonus = 0;
-  myRanks = { week: -1, all: -1 };
+  myRanks = { week: -1, all: -1, players: -1 };
   syncUI();
 }
 
@@ -413,10 +414,10 @@ function syncPicks(): void {
   }
   menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
   menu.querySelector(".board-help")!.textContent =
-    period === "week" ? "Starts fresh every Monday." : "";
+    period === "week" ? "Starts fresh every Monday." : period === "players" ? "Each player's best score." : "";
 }
 
-/** Switch the menu's high scores between this week and all time. */
+/** Switch the menu's high scores between this week, all time and player best. */
 function pickPeriod(value: string): void {
   if (!PERIODS.includes(value as Period)) return;
   period = value as Period;
@@ -616,7 +617,7 @@ const formError = document.getElementById("hs-error") as HTMLParagraphElement;
 const saveButton = form.querySelector("button[type=submit]") as HTMLButtonElement;
 let boards: Boards | null = null; // null until they load, or if they can't be reached
 // where the score you just saved landed on each board, so it can be highlighted
-let myRanks: Record<Period, number> = { week: -1, all: -1 };
+let myRanks: Record<Period, number> = { week: -1, all: -1, players: -1 };
 let entering = false;
 // the last name (or initials) typed, so next time it's already filled in
 const NAME_KEY = LOCAL ? "fishy-initials" : "fishy-name";
@@ -1185,10 +1186,14 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
     return;
   }
 
-  // This week and all time side by side when there's room; otherwise just one of them: all time if
-  // you made it, else this week.
+  // This week and all time side by side when there's room (player best in place of all time if
+  // that's the only one you made besides this week); otherwise just one: all time if you made it,
+  // else this week, else player best.
   const half = boardHalf();
-  const panels: Period[] = W >= 4 * half + 56 ? ["week", "all"] : [myRanks.all >= 0 ? "all" : "week"];
+  const panels: Period[] =
+    W >= 4 * half + 56
+      ? ["week", myRanks.all < 0 && myRanks.players >= 0 ? "players" : "all"]
+      : [myRanks.all >= 0 ? "all" : myRanks.week < 0 && myRanks.players >= 0 ? "players" : "week"];
   // Rows shrink to fit a short screen, down to a point; past that, only the top few (and yours) show.
   const n = Math.max(1, ...panels.map((p) => boards![p].length));
   const room = H - 24 - BOARD_EXTRA;
@@ -1244,7 +1249,7 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
 
   ctx.font = "bold 18px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
-  let heading = `${period === "week" ? "This week" : "All time"} · ${boardName()}`;
+  let heading = `${PERIOD_LABEL[period]} · ${boardName()}`;
   if (LOCAL && period === "all" && mine === 0) heading = "New best score!";
   else if (LOCAL && period === "all" && mine > 0) heading = "You made your top 10!";
   ctx.fillText(heading, cx, y);

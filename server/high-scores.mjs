@@ -1,10 +1,13 @@
 // High score boards for Fishy: an AWS Lambda behind a function URL, storing the top 10 of each game
-// mode and difficulty in DynamoDB, both all time and for this week.
-//   GET  ?mode=&difficulty= -> { scores: [{ name, score }], weekly: [...] }
-//   POST { name, score, mode, difficulty, time, end } -> { scores, rank, weekly, weeklyRank } (a rank is
-//        the new entry's index on that board, or -1 if it missed out)
+// mode and difficulty in DynamoDB: all time, this week, and each player's best.
+//   GET  ?mode=&difficulty= -> { scores: [{ name, score }], weekly: [...], players: [...] }
+//   POST { name, score, mode, difficulty, time, end } -> { scores, rank, weekly, weeklyRank, players,
+//        playerRank } (a rank is the new entry's index on that board, or -1 if it missed out)
 // `scores` is the all-time board. The weekly board starts fresh every Monday, US Eastern time. Both
-// allow repeats: a player with the ten best scores gets all ten places.
+// allow repeats: a player with the ten best scores gets all ten places. `players` is the top 10
+// players, each by their best score only; names match whatever the capitals. Keeping just the top 10
+// loses nothing: a player who isn't on it can only get back on with a score that beats the 10th.
+// It started (2026-11-02) from whoever was on the all-time and weekly boards then.
 // Every score also keeps how the game ended (`end`: won, shark, fish, hook or crab); scores saved
 // before 2026-11-02 have none.
 // Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
@@ -72,7 +75,7 @@ function json(statusCode, body) {
 function boardKeys(mode = "classic", difficulty = "medium") {
   if (!MODES.includes(mode) || !DIFFICULTIES.includes(difficulty)) return null;
   const all = mode === "classic" && difficulty === "medium" ? "board" : `board#${mode}#${difficulty}`;
-  return { all, week: `week#${weekStart()}#${mode}#${difficulty}` };
+  return { all, week: `week#${weekStart()}#${mode}#${difficulty}`, players: `players#${mode}#${difficulty}` };
 }
 
 /** The Monday that starts this week, as YYYY-MM-DD, by the clock in Georgia. */
@@ -91,9 +94,38 @@ function top(scores) {
   return [...scores].sort((a, b) => b.score - a.score).slice(0, TOP);
 }
 
+/** Each player's best score only, top 10. Names match whatever the capitals; ties go to whoever
+ * got there first. */
+function topPlayers(scores) {
+  const seen = new Set();
+  return [...scores]
+    .sort((a, b) => b.score - a.score)
+    .filter((e) => {
+      const key = e.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, TOP);
+}
+
 async function getBoard(pk) {
   const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk } }));
-  return Item ?? { pk, scores: [], version: 0 };
+  return Item ?? { pk, scores: [], version: 0, missing: true };
+}
+
+/** The players' board, or, before it's ever been saved, one made from the all-time and weekly
+ * boards (oldest scores first, so ties go to whoever got there first). When saving a score, those
+ * boards already have it, so its copies there are left out (`entry`). */
+async function getPlayers(keys, all, week, entry) {
+  const board = await getBoard(keys.players);
+  if (!board.missing) return board;
+  [all, week] = await Promise.all([all ?? getBoard(keys.all), week ?? getBoard(keys.week)]);
+  const copy = (e) => entry && e.at === entry.at && e.name === entry.name && e.score === entry.score;
+  const byAge = [...all.scores, ...week.scores]
+    .filter((e) => !copy(e))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  return { ...board, scores: topPlayers(byAge) };
 }
 
 /** Rate limit per IP: claims a short-lived marker row, or returns false if one is still live. */
@@ -145,21 +177,25 @@ async function submit(event) {
   if (!all) return json(503, { error: "Busy, try again" });
   const week = await place(keys.week, entry, Math.floor(Date.now() / 1000) + WEEK_TTL);
   if (!week) return json(503, { error: "Busy, try again" });
+  const players = await place(keys.players, entry, undefined, () => getPlayers(keys, null, null, entry), topPlayers);
+  if (!players) return json(503, { error: "Busy, try again" });
   return json(200, {
     scores: all.scores.map(publicEntry),
     rank: all.rank,
     weekly: week.scores.map(publicEntry),
     weeklyRank: week.rank,
+    players: players.scores.map(publicEntry),
+    playerRank: players.rank,
   });
 }
 
 /** Add an entry to one board: read-modify-write with a version check, retrying if two scores land
  * at once. Resolves to the board and the entry's place on it (-1 if it missed out), or null if it
  * stayed too busy. */
-async function place(pk, entry, expires) {
+async function place(pk, entry, expires, load = () => getBoard(pk), rank = top) {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const board = await getBoard(pk);
-    const scores = top([...board.scores, entry]);
+    const board = await load();
+    const scores = rank([...board.scores, entry]);
     const at = scores.indexOf(entry);
     if (at === -1) return { scores: board.scores, rank: -1 };
     try {
@@ -190,9 +226,11 @@ export const handler = async (event) => {
     const keys = boardKeys(query.mode, query.difficulty);
     if (!keys) return json(400, { error: "Bad game mode" });
     const [all, week] = await Promise.all([getBoard(keys.all), getBoard(keys.week)]);
+    const players = await getPlayers(keys, all, week);
     return json(200, {
       scores: all.scores.map(publicEntry),
       weekly: week.scores.map(publicEntry),
+      players: players.scores.map(publicEntry),
     });
   }
   if (method === "POST") return submit(event);
