@@ -92,9 +92,15 @@ export async function submitScore(
   };
 }
 
-/** Whether a score would make either board. */
-export function qualifies(boards: Boards, score: number): boolean {
-  return score > 0 && PERIODS.some((p) => boards[p].length < TOP || score > boards[p][TOP - 1].score);
+/** Whether a score would make any board. `name` is the name this device last saved under, if any:
+ * Player best only counts it if it beats that player's own best (a ten-name board is hardly ever
+ * full, so without this every score would ask). An unknown name is treated as a new player. */
+export function qualifies(boards: Boards, score: number, name = ""): boolean {
+  if (score <= 0) return false;
+  const makes = (list: Entry[]) => list.length < TOP || score > list[TOP - 1].score;
+  const key = name.trim().toLowerCase();
+  const mine = key ? boards.players.find((e) => e.name.toLowerCase() === key) : undefined;
+  return makes(boards.week) || makes(boards.all) || (mine ? score > mine.score : makes(boards.players));
 }
 
 /** Each player's best score only, top 10, highest first. Names match whatever the capitals; ties

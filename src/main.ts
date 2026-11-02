@@ -332,7 +332,7 @@ function endGame(next: State): void {
   const ended = endedAt;
   loadBoard()
     .then((scores) => {
-      if (scores && gameOver() && endedAt === ended && qualifies(scores, score)) openForm();
+      if (scores && gameOver() && endedAt === ended && qualifies(scores, score, savedName())) openForm();
     })
     .catch((err) => console.warn(err));
 }
@@ -639,16 +639,21 @@ if (LOCAL) {
 
 loadBoard().catch((err) => console.warn(err));
 
+/** The name last saved on this device, or "" if none (or storage is blocked). */
+function savedName(): string {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function openForm(): void {
   entering = true;
   syncUI();
   form.hidden = false;
   formError.textContent = "";
-  try {
-    nameInput.value = localStorage.getItem(NAME_KEY) ?? "";
-  } catch {
-    // storage blocked; just start blank
-  }
+  nameInput.value = savedName();
   if (!touchUI) nameInput.focus(); // on a tablet, let them tap it so the keyboard doesn't cover the board
 }
 

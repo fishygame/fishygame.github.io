@@ -51,7 +51,9 @@ to the fishygame org.
 - Each mode and difficulty has three global top-10 boards: this week (starts fresh every Monday,
   US Eastern), all time, and player best (each name's best score only, matching names whatever
   the capitals). This week and all time allow repeats, so one player can hold every place. A
-  score that makes any of them asks for a name (up to 8 characters). The end screen shows this
+  score that makes any of them asks for a name (up to 8 characters); for player best, that means
+  beating the best of the name last saved on this device (or, with no saved name or one not on
+  the board, making the board as a new player). The end screen shows this
   week and all time side by side (player best in place of all time if that's the only other one
   you made), or just one on a narrow screen; the High Scores menu switches between all three.
 - Each score also shows how that game ended: BIG FISH (won), Shark bait, Fish food (a bigger
