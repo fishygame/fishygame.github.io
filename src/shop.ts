@@ -1,5 +1,6 @@
 // The coin shop (Thomas's son's idea, 2026-11-06): coins earned by playing buy looks, hats and
-// trails for your fish. Cosmetics only, on purpose: anything that made you better would turn the
+// trails for your fish. Players see the coins as pearls and the shop as The Clam Shack (Thomas,
+// 2026-11-06); the code still says coins and shop. Cosmetics only, on purpose: anything that made you better would turn the
 // high score boards into a contest of who's played the most, not who plays best.
 //
 // Coins are kept per player name, the same kind of name as on the boards, with no password (it's a
@@ -237,7 +238,7 @@ export class Wallet {
     if (!s) return;
     if (!LOCAL && (s.pending.length || s.dirty)) {
       await this.push(s, true).catch(() => {
-        throw new Error(`Couldn't save ${s.name}'s coins. Check the internet and try again.`);
+        throw new Error(`Couldn't save ${s.name}'s pearls. Check the internet and try again.`);
       });
     }
     delete this.d.players[key];

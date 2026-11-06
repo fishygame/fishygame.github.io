@@ -773,7 +773,7 @@ for (const b of menu.querySelectorAll<HTMLButtonElement>('[data-screen="main"] .
   const rate = COIN_RATE[b.dataset.value as Difficulty];
   const span = document.createElement("span");
   span.className = "rate";
-  span.textContent = `coins x${rate === 0.5 ? "\u00BD" : rate}`;
+  span.textContent = `pearls x${rate === 0.5 ? "\u00BD" : rate}`;
   b.append(span);
 }
 addName.maxLength = NAME_MAX;
@@ -787,8 +787,8 @@ if (LOCAL) {
   });
 }
 document.getElementById("players-help")!.textContent = LOCAL
-  ? "Pick who's playing before each game, so the coins go to them."
-  : "Pick who's playing before each game, so the coins go to them. There are no passwords: add the same name on another device and your coins come along.";
+  ? "Pick who's playing before each game, so the pearls go to them."
+  : "Pick who's playing before each game, so the pearls go to them. There are no passwords: add the same name on another device and your pearls come along.";
 
 /** The outfit in the preview: what you're wearing, with the item being tried on swapped in. */
 function previewOutfit(): Record<Slot, string | null> {
@@ -829,7 +829,7 @@ function renderShop(): void {
       else if (owned) tag.textContent = "Yours";
       else {
         const coin = document.createElement("span");
-        coin.className = "coin";
+        coin.className = "pearl";
         tag.append(coin, item.price.toLocaleString());
       }
       b.append(item.name, tag);
@@ -858,10 +858,10 @@ function renderShop(): void {
     shopActionButton.disabled = true;
   } else if (balance >= item.price) {
     pickedLine.textContent = item.name;
-    shopActionButton.textContent = `Buy it for ${item.price.toLocaleString()} coins`;
+    shopActionButton.textContent = `Buy it for ${item.price.toLocaleString()} pearls`;
   } else {
     pickedLine.textContent = item.name;
-    shopActionButton.textContent = `${(item.price - balance).toLocaleString()} more coins to go!`;
+    shopActionButton.textContent = `${(item.price - balance).toLocaleString()} more pearls to go!`;
     shopActionButton.disabled = true;
   }
 }
@@ -873,7 +873,7 @@ function renderPlayerButton(): void {
   if (!wallet.name) {
     const who = document.createElement("b");
     who.textContent = "Guest";
-    b.append("Playing as ", who, wallet.players().length ? " · Switch" : " · Add your name for coins");
+    b.append("Playing as ", who, wallet.players().length ? " · Switch" : " · Add your name for pearls");
   } else {
     const who = document.createElement("b");
     who.textContent = wallet.name; // textContent, so names can't inject markup
@@ -896,7 +896,7 @@ function renderPlayers(): void {
     const tag = document.createElement("span");
     tag.className = "tag";
     const coin = document.createElement("span");
-    coin.className = "coin";
+    coin.className = "pearl";
     tag.append(coin, p.balance.toLocaleString());
     pick.append(name, tag);
     const remove = document.createElement("button");
@@ -917,7 +917,7 @@ function renderPlayers(): void {
   name.textContent = "Guest";
   const tag = document.createElement("span");
   tag.className = "tag";
-  tag.textContent = "no coins";
+  tag.textContent = "no pearls";
   guest.append(name, tag);
   li.append(guest);
   playerList.append(li);
@@ -927,8 +927,8 @@ async function removePlayer(key: string): Promise<void> {
   const p = wallet.players().find((x) => x.key === key);
   if (!p) return;
   const sure = LOCAL
-    ? `Take ${p.name} off this device? Their coins and stuff here will be gone.`
-    : `Take ${p.name} off this device? Their coins and stuff are saved, and come back if ${p.name} is added again.`;
+    ? `Take ${p.name} off this device? Their pearls and stuff here will be gone.`
+    : `Take ${p.name} off this device? Their pearls and stuff are saved, and come back if ${p.name} is added again.`;
   if (!confirm(sure)) return;
   addError.textContent = "";
   try {
@@ -1443,24 +1443,26 @@ function drawPopups(): void {
     ctx.fillStyle = "#ffd166";
     ctx.fillText(p.text, p.x, y);
     if (p.coins) {
-      // and the coins under it: a little coin, then "+6"
+      // and the pearls under it: a little pearl, then "+6"
       ctx.font = "bold 18px system-ui, sans-serif";
       const label = `+${p.coins}`;
       const w = ctx.measureText(label).width;
       const cx = p.x - (w + 18) / 2 + 7;
-      drawCoin(cx, y + 26, 7);
-      ctx.fillStyle = "#fff1a8";
+      drawPearl(cx, y + 26, 7);
+      ctx.fillStyle = "#f6f0ff";
       ctx.fillText(label, cx + 11 + w / 2, y + 26);
     }
   }
   ctx.restore();
 }
 
-function drawCoin(x: number, y: number, r: number): void {
-  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-  g.addColorStop(0, "#fff1a8");
-  g.addColorStop(0.5, "#ffc93c");
-  g.addColorStop(1, "#c98a00");
+/** A pearl: the shop's money (called coins in the code). */
+function drawPearl(x: number, y: number, r: number): void {
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, 0, x, y, r);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.45, "#f3ecf7");
+  g.addColorStop(0.8, "#d9cce6");
+  g.addColorStop(1, "#b7a6c9");
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1919,7 +1921,7 @@ function draw(): void {
   drawJoystick();
 
   // a Guest earns nothing, but hears what adding a name would get them
-  const coinLine = !coinsEarned ? "" : wallet.name ? `+${coinsEarned} coins · ` : "Add your name to collect coins! · ";
+  const coinLine = !coinsEarned ? "" : wallet.name ? `+${coinsEarned} pearls · ` : "Add your name to collect pearls! · ";
   const again = `${coinLine}${touchUI ? "Tap" : "Click or press Space"}`;
   if (state === "dead") drawOverlay(hooked ? "You got caught!" : pinched ? "You got pinched!" : "You got eaten!", `${again} to try again`, true);
   if (paused) drawOverlay("Paused", `${touchUI ? "Tap" : "Press Space"} to keep swimming`);

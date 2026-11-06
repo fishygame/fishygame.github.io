@@ -61,7 +61,8 @@ to the fishygame org.
   first 15-25 s in) and rests on the sand a few seconds. Eat it for 300 points, shown as a gold
   "+300"; in Speed it also counts as a bite for the combo. It never hangs from a line, so it can't
   be mistaken for the hook's worm. Not in Survival.
-- Coins and the Shop: every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
+- Pearls and The Clam Shack (players see these names; the code calls them coins and the shop):
+  every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
   a win and 6 per bait clump (Survival: 2 per level reached), times the difficulty (Easy x0.5,
   Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The Shop sells
   looks, hats and trails for your fish (cosmetics only, so the boards stay about skill), tried on
