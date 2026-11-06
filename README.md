@@ -60,6 +60,14 @@ to the fishygame org.
   first 15-25 s in) and rests on the sand a few seconds. Eat it for 300 points, shown as a gold
   "+300"; in Speed it also counts as a bite for the combo. It never hangs from a line, so it can't
   be mistaken for the hook's worm. Not in Survival.
+- Coins and the Shop: every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
+  a win and 6 per bait clump (Survival: 2 per level reached), times the difficulty (Easy x0.5,
+  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The Shop sells
+  looks, hats and trails for your fish (cosmetics only, so the boards stay about skill), tried on
+  in a live preview. Prices are in `ITEMS` in `src/shop.ts`. On the family site, a username (no
+  password) keeps your coins on any device you sign in on; coins earned signed out join the
+  account on sign-in, and signing out starts the device over at 0. On itch, coins stay in the
+  browser.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
@@ -86,6 +94,9 @@ to the fishygame org.
 - `src/hook.ts`: the fishing line that drops in now and then, and sometimes catches a fish
 - `src/crab.ts`: the crab that scuttles along the sand now and then
 - `src/bait.ts`: the bonus fish food that sinks from the surface now and then
+- `src/shop.ts`: the shop's items and prices, what games pay, and the wallet (local, and synced by
+  username through the Lambda)
+- `src/hats.ts`, `src/trail.ts`: the shop's hats and trails (looks are in `src/fish.ts`)
 - `src/scenery.ts`: the aquarium backdrop (water, sand, seaweed, castle, treasure chest, and
   the whale and sea turtles that swim by now and then)
 - `src/sound.ts`: background music (one song after another from the playlist) and sound effects
@@ -127,6 +138,14 @@ aws lambda update-function-code --function-name fishy-high-scores --zip-file fil
 ```
 
 (Git Bash on this machine has no `zip`, hence PowerShell.)
+
+The same Lambda keeps the shop's wallets, item `wallet#<username in lower case>`: `earned` (all
+coins ever), `owned`, `equipped`, `equippedAt` and `seen` (the last 500 game ids). GET
+`?wallet=<name>` reads one; POST `{ wallet, games: [{ id, coins }], owned, equipped, equippedAt }`
+merges a device's changes and returns the result. The merge only adds: each game id pays once
+(at most 200 coins), owned is a union, and the newest outfit wins; nothing new means no write.
+The game works out the balance (earned minus the prices of what's owned). Wallet syncs don't use
+the score cooldown. Deploy the Lambda before a game that syncs wallets.
 
 To wipe a board: `aws dynamodb delete-item --table-name fishy-high-scores --key '{"pk":{"S":"board"}}'`
 (or `board#speed#hard`, and so on)

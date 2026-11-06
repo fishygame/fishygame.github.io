@@ -12,6 +12,14 @@
 // before 2026-11-02 have none.
 // Speed and Survival boards also keep how long each game took (`time`, whole seconds); Speed scores
 // saved before that have none.
+// Coin shop wallets (2026-11-06), one per username, item `wallet#<name, lower case>`:
+//   GET  ?wallet=<name> -> { name, earned, owned, equipped, equippedAt, exists }
+//   POST { wallet: name, games: [{ id, coins }], owned: [ids], equipped: { look, hat, trail },
+//        equippedAt } -> the same, after merging
+// The merge only ever adds: each game's coins count once (by id), owned items are a union, and the
+// newest outfit wins. The game works out the balance (earned minus the prices of what's owned), so
+// prices live only in the game. There's no password: it's a family game, and a username is as
+// public as a name on the boards.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
 // the page still work. Names are checked here, not in the game, so the filter can't be skipped by
 // editing the page.
@@ -32,6 +40,13 @@ const COOLDOWN = 10; // seconds between submissions from the same IP
 const MODES = ["classic", "speed", "survival"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const ENDS = ["won", "shark", "fish", "hook", "crab"]; // you won, or what got you
+const SLOTS = ["look", "hat", "trail"];
+const ITEM_ID = /^[a-z0-9-]{1,20}$/;
+const GAME_ID = /^[a-z0-9-]{6,40}$/;
+const MAX_GAMES = 50; // per request
+const MAX_GAME_COINS = 200; // far beyond a real game (a win on Hard with lots of bait is about 60)
+const MAX_OWNED = 60;
+const SEEN = 500; // game ids remembered per wallet, so a retried sync can't pay twice
 
 // Matched anywhere in the name, after undoing l33t-speak and repeated letters.
 const BLOCKED_ANYWHERE = [
@@ -147,14 +162,16 @@ async function claimCooldown(ip) {
   }
 }
 
-async function submit(event) {
-  let body;
+function parseBody(event) {
   try {
     const raw = event.isBase64Encoded ? Buffer.from(event.body ?? "", "base64").toString() : event.body;
-    body = JSON.parse(raw ?? "");
+    return JSON.parse(raw ?? "");
   } catch {
-    return json(400, { error: "Bad request" });
+    return null;
   }
+}
+
+async function submit(body, event) {
   const keys = boardKeys(body.mode, body.difficulty);
   if (!keys) return json(400, { error: "Bad game mode" });
   const name = cleanName(body.name);
@@ -215,6 +232,97 @@ async function place(pk, entry, expires, load = () => getBoard(pk), rank = top) 
   return null;
 }
 
+/** The username, cleaned and checked, or an error response. */
+function walletName(raw) {
+  const name = cleanName(raw);
+  if (!name) return { error: json(400, { error: `Use 1-${NAME_MAX} letters or numbers` }) };
+  if (isRude(name)) return { error: json(400, { error: "Please pick a different name" }) };
+  return { name, pk: `wallet#${name.toLowerCase()}` };
+}
+
+function publicWallet(item, name) {
+  return {
+    name: item?.name ?? name,
+    earned: item?.earned ?? 0,
+    owned: item?.owned ?? [],
+    equipped: item?.equipped ?? {},
+    equippedAt: item?.equippedAt ?? 0,
+    exists: !!item,
+  };
+}
+
+async function getWallet(query) {
+  const who = walletName(query.wallet);
+  if (who.error) return who.error;
+  const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk: who.pk } }));
+  return json(200, publicWallet(Item, who.name));
+}
+
+/** The request's wallet changes, checked, or null if anything's off. */
+function walletChanges(body) {
+  const { games = [], owned = [], equipped = {}, equippedAt = 0 } = body;
+  if (!Array.isArray(games) || games.length > MAX_GAMES) return null;
+  for (const g of games) {
+    if (!g || typeof g.id !== "string" || !GAME_ID.test(g.id)) return null;
+    if (!Number.isInteger(g.coins) || g.coins < 0 || g.coins > MAX_GAME_COINS) return null;
+  }
+  if (!Array.isArray(owned) || owned.length > MAX_OWNED || !owned.every((id) => typeof id === "string" && ITEM_ID.test(id))) {
+    return null;
+  }
+  if (!equipped || typeof equipped !== "object" || Array.isArray(equipped)) return null;
+  for (const [slot, id] of Object.entries(equipped)) {
+    if (!SLOTS.includes(slot) || typeof id !== "string" || !ITEM_ID.test(id)) return null;
+  }
+  if (!Number.isInteger(equippedAt) || equippedAt < 0) return null;
+  return { games, owned, equipped, equippedAt };
+}
+
+/** Merge a device's games, purchases and outfit into its wallet: read-modify-write with a version
+ * check, retrying if two devices sync at once. Writes nothing if nothing changed. */
+async function syncWallet(body) {
+  const who = walletName(body.wallet);
+  if (who.error) return who.error;
+  const changes = walletChanges(body);
+  if (!changes) return json(400, { error: "Bad request" });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk: who.pk } }));
+    const cur = Item ?? { pk: who.pk, name: who.name, earned: 0, owned: [], seen: [], equipped: {}, equippedAt: 0, version: 0 };
+    let earned = cur.earned;
+    const seen = [...cur.seen];
+    for (const g of changes.games) {
+      if (seen.includes(g.id)) continue;
+      earned += g.coins;
+      seen.push(g.id);
+    }
+    const owned = [...cur.owned, ...changes.owned.filter((id) => !cur.owned.includes(id))].slice(0, MAX_OWNED);
+    const newer = changes.equippedAt > cur.equippedAt;
+    const next = {
+      ...cur,
+      earned,
+      owned,
+      seen: seen.slice(-SEEN),
+      equipped: newer ? changes.equipped : cur.equipped,
+      equippedAt: newer ? changes.equippedAt : cur.equippedAt,
+    };
+    const same = Item && earned === cur.earned && owned.length === cur.owned.length && !newer;
+    if (same) return json(200, publicWallet(cur, who.name));
+    try {
+      await db.send(
+        new PutCommand({
+          TableName: TABLE,
+          Item: { ...next, version: cur.version + 1 },
+          ConditionExpression: "attribute_not_exists(pk) OR version = :v",
+          ExpressionAttributeValues: { ":v": cur.version },
+        }),
+      );
+      return json(200, publicWallet(next, who.name));
+    } catch (err) {
+      if (err.name !== "ConditionalCheckFailedException") throw err;
+    }
+  }
+  return json(503, { error: "Busy, try again" });
+}
+
 function publicEntry({ name, score, time, end }) {
   return { name, score, ...(time !== undefined && { time }), ...(end && { end }) };
 }
@@ -223,6 +331,7 @@ export const handler = async (event) => {
   const method = event.requestContext?.http?.method;
   if (method === "GET") {
     const query = event.queryStringParameters ?? {};
+    if (query.wallet !== undefined) return getWallet(query);
     const keys = boardKeys(query.mode, query.difficulty);
     if (!keys) return json(400, { error: "Bad game mode" });
     const [all, week] = await Promise.all([getBoard(keys.all), getBoard(keys.week)]);
@@ -233,6 +342,10 @@ export const handler = async (event) => {
       players: players.scores.map(publicEntry),
     });
   }
-  if (method === "POST") return submit(event);
+  if (method === "POST") {
+    const body = parseBody(event);
+    if (!body || typeof body !== "object") return json(400, { error: "Bad request" });
+    return body.wallet !== undefined ? syncWallet(body) : submit(body, event);
+  }
   return json(405, { error: "Method not allowed" });
 };

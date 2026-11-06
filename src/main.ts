@@ -5,6 +5,22 @@ import { SAND_HEIGHT, Scenery } from "./scenery";
 import { HOOK_TIMING, Hook } from "./hook";
 import { CRAB_TIMING, Crab } from "./crab";
 import { Bait } from "./bait";
+import { Trail } from "./trail";
+import {
+  BAIT_COINS,
+  COIN_RATE,
+  GAME_COINS,
+  type Hat,
+  ITEMS,
+  LEVEL_COINS,
+  type Look,
+  PROGRESS_COINS,
+  SLOT_LABEL,
+  type Slot,
+  type TrailKind,
+  WIN_COINS,
+  Wallet,
+} from "./shop";
 import {
   BOARD_TITLE,
   type Boards,
@@ -325,7 +341,12 @@ let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
 let baits: Bait[] = [];
 let baitTimer = 0;
-let popups: { x: number; y: number; text: string; at: number }[] = [];
+let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
+let baitsEaten = 0;
+let coinsEarned = 0; // what the game that just ended paid, for the end screen
+const wallet = new Wallet();
+const trail = new Trail();
+let trailKind: TrailKind | null = null; // the hero's, for this game
 
 function loadChoice<T extends string>(key: string, options: T[], fallback: T): T {
   try {
@@ -344,6 +365,12 @@ function reset(): void {
   state = "playing";
   const survival = mode === "survival";
   player = makePlayer(survival ? SURVIVAL_RADIUS : START_RADIUS);
+  player.look = (wallet.wearing("look") as Look | null) ?? "plain";
+  player.hat = wallet.wearing("hat") as Hat | null;
+  trailKind = wallet.wearing("trail") as TrailKind | null;
+  trail.clear();
+  baitsEaten = 0;
+  coinsEarned = 0;
   fish = [];
   score = 0;
   spawnTimer = 0;
@@ -391,6 +418,8 @@ function endGame(next: State): void {
     timeBonus = Math.max(0, Math.round(SPEED_PAR - elapsed())) * TIME_BONUS;
     score += timeBonus;
   }
+  coinsEarned = gameCoins();
+  wallet.award(coinsEarned);
   syncUI();
   // get the latest board, and ask for a name if this score makes it
   const ended = endedAt;
@@ -399,6 +428,19 @@ function endGame(next: State): void {
       if (scores && gameOver() && endedAt === ended && qualifies(scores, score, savedName())) openForm();
     })
     .catch((err) => console.warn(err));
+}
+
+/** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew (or the level you reached in
+ * Survival), winning and bait, times the difficulty's rate. */
+function gameCoins(): number {
+  if (mode === "survival") return level * LEVEL_COINS;
+  const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + baitsEaten * BAIT_COINS;
+  return Math.round(raw * COIN_RATE[difficulty]);
+}
+
+/** Bait's coins on this difficulty. */
+function baitCoins(): number {
+  return Math.round(BAIT_COINS * COIN_RATE[difficulty]);
 }
 
 /** Seconds of play so far, not counting pauses; it stops when the game ends. */
@@ -443,6 +485,11 @@ function showMenu(): void {
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
   if (name === "scores") loadMenuScores();
+  if (name === "shop") {
+    picked = null;
+    renderShop();
+    void wallet.sync();
+  }
   // Focus the screen's first menu button without jumping to it: on the Sound screen that's Back,
   // below the song list, and the menu should still open at the top.
   if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]`)?.focus({ preventScroll: true });
@@ -673,6 +720,8 @@ menu.addEventListener("click", (e) => {
     songsOff = songsOff.includes(id) ? songsOff.filter((x) => x !== id) : [...songsOff, id];
     applyMusic();
   } else if (button.dataset.play) sound.playSong(button.dataset.play);
+  else if (button.dataset.item) pickItem(button.dataset.item);
+  else if (button.dataset.shop) shopAction(button.dataset.shop);
   else if (kind === "eat") pickEatSound(button.dataset.value!);
   else if (kind === "period") pickPeriod(button.dataset.value!);
   else if (kind === "shuffle") {
@@ -692,6 +741,171 @@ toMenu.addEventListener("click", () => {
 
 applyMusic();
 showScreen("main");
+
+// ---- coin shop ----
+const shopItems = document.getElementById("shop-items") as HTMLDivElement;
+const shopActionButton = document.getElementById("shop-action") as HTMLButtonElement;
+const shopPreview = document.getElementById("shop-preview") as HTMLCanvasElement;
+const shopScreen = menu.querySelector<HTMLElement>('[data-screen="shop"]')!;
+const syncForm = document.getElementById("sync-form") as HTMLFormElement;
+const syncName = document.getElementById("sync-name") as HTMLInputElement;
+const syncError = document.getElementById("sync-error") as HTMLParagraphElement;
+let picked: string | null = null; // the item being tried on in the preview
+const previewFish = new Fish(0, 0, 0, 0, 46, 26);
+const previewTrail = new Trail();
+
+// what each difficulty pays, under its name on the main menu, so the kids can see Hard pays more
+for (const b of menu.querySelectorAll<HTMLButtonElement>('[data-screen="main"] .pick[data-pick="difficulty"] button')) {
+  const rate = COIN_RATE[b.dataset.value as Difficulty];
+  const span = document.createElement("span");
+  span.className = "rate";
+  span.textContent = `coins x${rate === 0.5 ? "\u00BD" : rate}`;
+  b.append(span);
+}
+syncName.maxLength = NAME_MAX;
+document.getElementById("sync")!.hidden = LOCAL; // itch keeps coins in the browser only
+
+/** The outfit in the preview: what you're wearing, with the item being tried on swapped in. */
+function previewOutfit(): Record<Slot, string | null> {
+  const outfit: Record<Slot, string | null> = { look: wallet.wearing("look"), hat: wallet.wearing("hat"), trail: wallet.wearing("trail") };
+  const item = ITEMS.find((i) => i.id === picked);
+  if (item) outfit[item.slot] = item.id;
+  return outfit;
+}
+
+function renderShop(): void {
+  const balance = wallet.balance();
+  for (const n of menu.querySelectorAll(".shop-coins .n")) n.textContent = balance.toLocaleString();
+  document.getElementById("shop-balance")!.textContent = balance.toLocaleString();
+  if (shopScreen.hidden) return;
+  // keep keyboard focus on the same item across the rebuild
+  const focused = (document.activeElement as HTMLElement | null)?.dataset?.item;
+  shopItems.innerHTML = "";
+  for (const slot of Object.keys(SLOT_LABEL) as Slot[]) {
+    const h = document.createElement("h3");
+    h.textContent = SLOT_LABEL[slot];
+    const grid = document.createElement("div");
+    grid.className = "shop-grid";
+    for (const item of ITEMS.filter((i) => i.slot === slot)) {
+      const b = document.createElement("button");
+      b.dataset.item = item.id;
+      const wearing = wallet.wearing(slot) === item.id;
+      const owned = wallet.owns(item.id);
+      b.classList.toggle("picked", picked === item.id);
+      b.classList.toggle("wearing", wearing);
+      b.classList.toggle("locked", !owned && balance < item.price);
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      if (wearing) tag.textContent = "Wearing";
+      else if (owned) tag.textContent = "Yours";
+      else {
+        const coin = document.createElement("span");
+        coin.className = "coin";
+        tag.append(coin, item.price.toLocaleString());
+      }
+      b.append(item.name, tag);
+      grid.append(b);
+    }
+    shopItems.append(h, grid);
+  }
+  if (focused) shopItems.querySelector<HTMLButtonElement>(`[data-item="${focused}"]`)?.focus();
+
+  const item = ITEMS.find((i) => i.id === picked);
+  const pickedLine = document.getElementById("shop-picked")!;
+  shopActionButton.disabled = false;
+  if (!item) {
+    pickedLine.textContent = "";
+    shopActionButton.textContent = "Tap something to try it on";
+    shopActionButton.disabled = true;
+  } else if (wallet.wearing(item.slot) === item.id) {
+    pickedLine.textContent = `${item.name}: you're wearing it`;
+    shopActionButton.textContent = "Take it off";
+  } else if (wallet.owns(item.id)) {
+    pickedLine.textContent = `${item.name}: it's yours`;
+    shopActionButton.textContent = "Wear it";
+  } else if (balance >= item.price) {
+    pickedLine.textContent = item.name;
+    shopActionButton.textContent = `Buy it for ${item.price.toLocaleString()} coins`;
+  } else {
+    pickedLine.textContent = item.name;
+    shopActionButton.textContent = `${(item.price - balance).toLocaleString()} more coins to go!`;
+    shopActionButton.disabled = true;
+  }
+
+  const signedIn = !!wallet.name;
+  document.getElementById("sync-out")!.hidden = signedIn;
+  document.getElementById("sync-in")!.hidden = !signedIn;
+  document.getElementById("sync-who")!.textContent = wallet.name;
+}
+
+function pickItem(id: string): void {
+  picked = picked === id ? null : id;
+  renderShop();
+}
+
+function shopAction(what: string): void {
+  if (what === "signout") {
+    if (confirm(`Sign out? Your coins stay with ${wallet.name}. This device starts again at 0 until you sign in.`)) wallet.signOut();
+    return;
+  }
+  const item = ITEMS.find((i) => i.id === picked);
+  if (!item) return;
+  if (wallet.wearing(item.slot) === item.id) wallet.wear(item.slot, null);
+  else if (wallet.owns(item.id)) wallet.wear(item.slot, item.id);
+  else if (wallet.buy(item.id)) sound.bonus();
+  shopActionButton.focus();
+}
+
+wallet.onChange = renderShop;
+renderShop();
+void wallet.sync();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void wallet.sync();
+});
+
+syncForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  syncError.textContent = "";
+  const button = syncForm.querySelector("button")!;
+  button.disabled = true;
+  try {
+    await wallet.signIn(syncName.value);
+    syncName.value = "";
+    try {
+      localStorage.setItem(NAME_KEY, wallet.name); // the high score form fills it in too
+    } catch {
+      // fine
+    }
+  } catch (err) {
+    syncError.textContent = (err as Error).message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+/** The shop's preview: your fish in its outfit, swimming on the spot, trail streaming behind. */
+function drawShopPreview(dt: number): void {
+  if (state !== "menu" || menu.hidden || shopScreen.hidden) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = shopPreview.clientWidth;
+  const h = shopPreview.clientHeight;
+  if (shopPreview.width !== Math.round(w * dpr) || shopPreview.height !== Math.round(h * dpr)) {
+    shopPreview.width = Math.round(w * dpr);
+    shopPreview.height = Math.round(h * dpr);
+  }
+  const p = shopPreview.getContext("2d") as CanvasRenderingContext2D;
+  p.setTransform(dpr, 0, 0, dpr, 0, 0);
+  p.clearRect(0, 0, w, h);
+  const outfit = previewOutfit();
+  previewFish.look = (outfit.look as Look | null) ?? "plain";
+  previewFish.hat = outfit.hat as Hat | null;
+  previewFish.x = w / 2 + 20;
+  previewFish.y = h / 2 + 16 + Math.sin(time * 2) * 4;
+  const kind = outfit.trail as TrailKind | null;
+  previewTrail.update(dt, kind, previewFish.x, previewFish.y, 1, previewFish.r, 200, -90);
+  previewTrail.draw(p, kind, time);
+  previewFish.draw(p, time);
+}
 
 // ---- high scores ----
 const form = document.getElementById("hs-form") as HTMLFormElement;
@@ -732,7 +946,7 @@ function openForm(): void {
   syncUI();
   form.hidden = false;
   formError.textContent = "";
-  nameInput.value = savedName();
+  nameInput.value = (!LOCAL && wallet.name) || savedName();
   if (!touchUI) nameInput.focus(); // on a tablet, let them tap it so the keyboard doesn't cover the board
 }
 
@@ -948,6 +1162,7 @@ function update(dt: number): void {
   }
 
   if (state !== "playing") {
+    trail.update(dt, null, 0, 0, 1, 0, 0);
     for (const f of fish) f.update(dt);
     if (hooked) {
       // dangling nose-up from the hook as it's reeled in
@@ -1000,6 +1215,7 @@ function update(dt: number): void {
   const still = !steer.x && !steer.y && Math.hypot(player.vx, player.vy) < STILL_SPEED;
   stillFor = still ? stillFor + dt : 0;
   player.nervous = stillFor > NERVOUS_AFTER;
+  trail.update(dt, trailKind, player.x, player.y, player.facing, player.r, Math.hypot(player.vx, player.vy));
 
   if (mode === "survival") survive(dt);
 
@@ -1111,7 +1327,8 @@ function bonusBait(dt: number): void {
       lastBite = time;
     }
     score += BAIT_POINTS;
-    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, at: time });
+    baitsEaten++;
+    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, coins: baitCoins(), at: time });
     sound.bonus();
   }
 }
@@ -1128,10 +1345,33 @@ function drawPopups(): void {
   for (const p of popups) {
     const t = (time - p.at) / POPUP_TIME;
     ctx.globalAlpha = Math.min(1, (1 - t) / 0.4);
+    const y = p.y - 20 - 50 * t;
+    ctx.font = "bold 26px system-ui, sans-serif";
     ctx.fillStyle = "#ffd166";
-    ctx.fillText(p.text, p.x, p.y - 20 - 50 * t);
+    ctx.fillText(p.text, p.x, y);
+    if (p.coins) {
+      // and the coins under it: a little coin, then "+6"
+      ctx.font = "bold 18px system-ui, sans-serif";
+      const label = `+${p.coins}`;
+      const w = ctx.measureText(label).width;
+      const cx = p.x - (w + 18) / 2 + 7;
+      drawCoin(cx, y + 26, 7);
+      ctx.fillStyle = "#fff1a8";
+      ctx.fillText(label, cx + 11 + w / 2, y + 26);
+    }
   }
   ctx.restore();
+}
+
+function drawCoin(x: number, y: number, r: number): void {
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+  g.addColorStop(0, "#fff1a8");
+  g.addColorStop(0.5, "#ffc93c");
+  g.addColorStop(1, "#c98a00");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 /** Survival, every frame: level up when it's time, and score the time you've lasted. */
@@ -1572,6 +1812,7 @@ function draw(): void {
   // no outlines in Survival: everything can eat you
   const outlines = tuning.outlines && mode !== "survival";
   for (const f of fish) f.draw(ctx, time, outlines && dangerous(f));
+  trail.draw(ctx, trailKind, time);
   player.draw(ctx, time);
   for (const h of hooks) h.draw(ctx, time);
   scenery.drawFront(ctx, time);
@@ -1584,7 +1825,7 @@ function draw(): void {
 
   drawJoystick();
 
-  const again = touchUI ? "Tap" : "Click or press Space";
+  const again = `${coinsEarned ? `+${coinsEarned} coins · ` : ""}${touchUI ? "Tap" : "Click or press Space"}`;
   if (state === "dead") drawOverlay(hooked ? "You got caught!" : pinched ? "You got pinched!" : "You got eaten!", `${again} to try again`, true);
   if (paused) drawOverlay("Paused", `${touchUI ? "Tap" : "Press Space"} to keep swimming`);
   if (state === "won") drawOverlay("You're the biggest fish!", `${again} to play again`, true);
@@ -1599,6 +1840,7 @@ function frame(now: number): void {
   last = now;
   update(dt);
   draw();
+  drawShopPreview(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

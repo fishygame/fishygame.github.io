@@ -12,7 +12,7 @@ import type { Difficulty, Mode } from "./settings";
 export const LOCAL = import.meta.env.VITE_SCORE_BOARD === "local";
 export const BOARD_TITLE = LOCAL ? "Your best scores" : "High scores";
 
-const API = "https://kmyhjk6d7e2hk4rbotynrnxdt40ocefq.lambda-url.us-east-1.on.aws/";
+export const API = "https://kmyhjk6d7e2hk4rbotynrnxdt40ocefq.lambda-url.us-east-1.on.aws/";
 const STORAGE_KEY = "fishy-best-scores";
 export const NAME_MAX = LOCAL ? 3 : 8;
 const TOP = 10;

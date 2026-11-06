@@ -1,4 +1,25 @@
+import { drawHat } from "./hats";
+import type { Hat, Look } from "./shop";
+
 export type Kind = "fish" | "shark";
+
+// How each shop look shifts the hero's colors: a fixed hue (or the fish's own), and saturation and
+// lightness scaled and nudged. Clownfish, Spotted and Rainbow keep the orange and add a pattern.
+const LOOK_TONE: Record<Look, { h?: number; s: number; l: number; dl: number }> = {
+  plain: { s: 1, l: 1, dl: 0 },
+  clown: { s: 1, l: 1, dl: 0 },
+  spots: { s: 1, l: 1, dl: 0 },
+  silver: { h: 210, s: 0.12, l: 1, dl: 6 },
+  gold: { h: 44, s: 1.15, l: 1, dl: 4 },
+  midnight: { h: 238, s: 0.6, l: 0.42, dl: 0 },
+  rainbow: { s: 1, l: 1, dl: 0 },
+};
+const RAINBOW = ["#ff4d4d", "#ff9f1c", "#ffe14d", "#4cd964", "#2fa8ff", "#8f5bff"];
+// Spotted: where the spots go, in body lengths and heights, and their size in body heights
+const SPOTS = [
+  [0.35, -0.5, 0.13], [0.05, -0.62, 0.11], [-0.3, -0.45, 0.12], [-0.6, -0.15, 0.09],
+  [0.2, -0.05, 0.1], [-0.12, 0.05, 0.12], [-0.42, 0.3, 0.1], [0.12, 0.45, 0.09], [0.45, 0.35, 0.07],
+];
 
 const SHARK_FIN = "#56687a";
 
@@ -23,7 +44,10 @@ export class Fish {
   // The hero, holding still, glances about nervously (Thomas, 2026-11-05: "subtly"). Where the pupil
   // sits, in eye widths from the eye's middle; straight ahead is (0.2, 0).
   nervous = false;
-  private look = { x: 0.2, y: 0 };
+  // the hero's shop cosmetics; every other fish stays plain
+  look: Look = "plain";
+  hat: Hat | null = null;
+  private gaze = { x: 0.2, y: 0 };
   private lookTo = { x: 0.2, y: 0 };
   private lookTimer = 0;
   private phase = Math.random() * Math.PI * 2;
@@ -84,8 +108,8 @@ export class Fish {
       this.lookTimer = 0.3; // the first glance comes soon after holding still
     }
     const k = Math.min(1, dt * 25); // a quick flick, not a slow roll
-    this.look.x += (this.lookTo.x - this.look.x) * k;
-    this.look.y += (this.lookTo.y - this.look.y) * k;
+    this.gaze.x += (this.lookTo.x - this.gaze.x) * k;
+    this.gaze.y += (this.lookTo.y - this.gaze.y) * k;
   }
 
   /**
@@ -208,7 +232,7 @@ export class Fish {
     const pad = 8; // room for the outline
     const w = x1 - x0 + pad * 2;
     const h = y1 - y0 + pad * 2;
-    const key = `${this.r}|${danger}|${scale}`;
+    const key = `${this.r}|${danger}|${scale}|${this.look}`;
     if (key !== this.spriteKey) {
       let c = this.sprite;
       if (!c) {
@@ -228,46 +252,55 @@ export class Fish {
   }
 
   private drawFish(ctx: CanvasRenderingContext2D, time: number, danger: boolean): void {
-    const h = this.hue;
+    const spin = this.look === "rainbow" ? (time * 60) % 360 : undefined; // a rainbow's fins cycle
     const L = this.r * 1.2; // half-length of the body
     const B = this.r * 0.62; // half-height of the body
     const wag = Math.sin(time * 8 + this.phase) * B * 0.25;
     const flap = Math.sin(time * 10 + this.phase);
 
     // forked tail
-    ctx.fillStyle = `hsl(${h} 70% 45% / 0.9)`;
+    ctx.fillStyle = this.tone(70, 45, 0.9, spin);
     ctx.beginPath();
     ctx.moveTo(-L * 0.75, 0);
     ctx.quadraticCurveTo(-L * 1.15, -B * 0.4 + wag * 0.5, -L * 1.5, -B * 1.0 + wag);
     ctx.quadraticCurveTo(-L * 1.25, wag * 0.6, -L * 1.5, B * 1.0 + wag);
     ctx.quadraticCurveTo(-L * 1.15, B * 0.4 + wag * 0.5, -L * 0.75, 0);
     ctx.fill();
-    this.finRays(ctx, -L * 0.8, 0, -L * 1.4, wag, B * 0.8, h);
+    this.finRays(ctx, -L * 0.8, 0, -L * 1.4, wag, B * 0.8, this.tone(60, 30, 0.35, spin));
 
     this.cached(ctx, danger, [-L * 0.9, -B * 1.3, L * 1.02, B * 1.15], (c) => this.fishBodyParts(c, danger));
     // the cached eye looks ahead; a glancing one is painted over it (the white covers the old pupil)
-    if (!this.darter && (Math.abs(this.look.x - 0.2) > 0.01 || Math.abs(this.look.y) > 0.01))
-      this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a", this.look);
+    if (!this.darter && (Math.abs(this.gaze.x - 0.2) > 0.01 || Math.abs(this.gaze.y) > 0.01))
+      this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a", this.gaze);
 
     // pectoral fin, flapping
-    ctx.fillStyle = `hsl(${h} 75% 60% / 0.75)`;
+    ctx.fillStyle = this.tone(75, 60, 0.75, spin);
     ctx.beginPath();
     ctx.moveTo(L * 0.25, B * 0.25);
     ctx.quadraticCurveTo(-L * 0.05, B * (0.55 + flap * 0.15), -L * 0.15, B * (0.25 + flap * 0.2));
     ctx.quadraticCurveTo(L * 0.05, B * 0.15, L * 0.25, B * 0.25);
     ctx.fill();
+
+    if (this.hat) drawHat(ctx, this.hat, this.r, time);
+  }
+
+  /** A color on this fish, as hsl from the plain fish's saturation and lightness, shifted for its
+   * look. `hue` overrides the hue (a rainbow's cycling fins). */
+  private tone(s: number, l: number, a = 1, hue?: number): string {
+    const t = LOOK_TONE[this.look];
+    const h = hue ?? t.h ?? this.hue;
+    return `hsl(${h} ${Math.min(100, s * t.s)}% ${Math.min(95, l * t.l + t.dl)}% / ${a})`;
   }
 
   /** Everything on a fish but the tail and the flapping pectoral fin. */
   private fishBodyParts(ctx: CanvasRenderingContext2D, danger: boolean): void {
-    const h = this.hue;
     const L = this.r * 1.2;
     const B = this.r * 0.62;
-    const edge = danger ? "rgba(235, 50, 50, 0.95)" : `hsl(${h} 60% 25% / 0.8)`;
+    const edge = danger ? "rgba(235, 50, 50, 0.95)" : this.tone(60, 25, 0.8);
     const lw = Math.max(1, this.r * 0.05);
 
     // dorsal and anal fins
-    ctx.fillStyle = `hsl(${h} 70% 45% / 0.9)`;
+    ctx.fillStyle = this.tone(70, 45, 0.9);
     ctx.beginPath();
     ctx.moveTo(L * 0.3, -B * 0.8);
     ctx.quadraticCurveTo(-L * 0.05, -B * 1.6, -L * 0.5, -B * 0.65);
@@ -280,9 +313,12 @@ export class Fish {
     // body with countershading: dark back, light belly
     this.fishBody(ctx, L, B);
     const g = ctx.createLinearGradient(0, -B, 0, B);
-    g.addColorStop(0, `hsl(${h} 65% 35%)`);
-    g.addColorStop(0.45, `hsl(${h} 75% 55%)`);
-    g.addColorStop(1, `hsl(${h} 80% 85%)`);
+    if (this.look === "rainbow") RAINBOW.forEach((c, i) => g.addColorStop(i / (RAINBOW.length - 1), c));
+    else {
+      g.addColorStop(0, this.tone(65, 35));
+      g.addColorStop(0.45, this.tone(75, 55));
+      g.addColorStop(1, this.tone(80, 85));
+    }
     ctx.fillStyle = g;
     ctx.fill();
     ctx.strokeStyle = edge;
@@ -293,7 +329,7 @@ export class Fish {
     ctx.save();
     this.fishBody(ctx, L, B);
     ctx.clip();
-    ctx.strokeStyle = `hsl(${h} 60% 30% / 0.18)`;
+    ctx.strokeStyle = this.tone(60, 30, 0.18);
     ctx.lineWidth = lw;
     const step = B * 0.32;
     const a0 = -Math.PI / 2.5;
@@ -308,22 +344,23 @@ export class Fish {
     }
     ctx.stroke();
     // lateral line
-    ctx.strokeStyle = `hsl(${h} 60% 30% / 0.3)`;
+    ctx.strokeStyle = this.tone(60, 30, 0.3);
     ctx.beginPath();
     ctx.moveTo(L * 0.4, -B * 0.2);
     ctx.quadraticCurveTo(0, -B * 0.35, -L * 0.75, 0);
     ctx.stroke();
+    this.pattern(ctx, L, B, lw);
     ctx.restore();
 
     // gill
-    ctx.strokeStyle = `hsl(${h} 60% 28% / 0.6)`;
+    ctx.strokeStyle = this.tone(60, 28, 0.6);
     ctx.lineWidth = lw * 1.3;
     ctx.beginPath();
     ctx.arc(L * 0.15, 0, B * 0.75, -Math.PI / 3.2, Math.PI / 3.2);
     ctx.stroke();
 
     // mouth
-    ctx.strokeStyle = `hsl(${h} 50% 20% / 0.8)`;
+    ctx.strokeStyle = this.tone(50, 20, 0.8);
     ctx.beginPath();
     ctx.moveTo(L * 0.98, B * 0.12);
     ctx.lineTo(L * 0.82, B * 0.18);
@@ -332,6 +369,53 @@ export class Fish {
     // fish that dart (Survival's later levels) get the same wild red eyes as darting sharks
     if (this.darter) this.crazyEye(ctx, L * 0.58, -B * 0.18, this.r * 0.15);
     else this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a");
+  }
+
+  /** The look's markings, painted over the body (already clipped to it). */
+  private pattern(ctx: CanvasRenderingContext2D, L: number, B: number, lw: number): void {
+    if (this.look === "clown") {
+      // three white bands edged in black: behind the eye, mid-body, and at the tail
+      for (const [x, w] of [[0.38, 0.17], [-0.05, 0.2], [-0.62, 0.13]]) {
+        const band = new Path2D();
+        band.moveTo(L * (x + 0.06), -B * 1.2);
+        band.quadraticCurveTo(L * (x - 0.1), 0, L * (x + 0.06), B * 1.2);
+        ctx.strokeStyle = "#16120f";
+        ctx.lineWidth = L * w + lw * 3;
+        ctx.stroke(band);
+        ctx.strokeStyle = "#fbfbf6";
+        ctx.lineWidth = L * w;
+        ctx.stroke(band);
+      }
+    } else if (this.look === "spots") {
+      ctx.fillStyle = "rgba(70, 30, 10, 0.55)";
+      for (const [x, y, size] of SPOTS) {
+        ctx.beginPath();
+        ctx.ellipse(L * x, B * y, B * size * 1.2, B * size, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (this.look === "gold" || this.look === "silver") {
+      // a bright metallic streak across the shoulder
+      const shine = ctx.createLinearGradient(L * 0.1, -B, -L * 0.3, B);
+      shine.addColorStop(0.25, "rgba(255, 255, 255, 0)");
+      shine.addColorStop(0.42, "rgba(255, 255, 255, 0.75)");
+      shine.addColorStop(0.5, "rgba(255, 255, 255, 0.15)");
+      shine.addColorStop(0.58, "rgba(255, 255, 255, 0.5)");
+      shine.addColorStop(0.7, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = shine;
+      ctx.fillRect(-L, -B * 1.2, L * 2, B * 2.4);
+    } else if (this.look === "midnight") {
+      // glowing dots along the side, like a deep-sea fish
+      ctx.shadowColor = "#7df9ff";
+      ctx.shadowBlur = B * 0.25;
+      ctx.fillStyle = "#b8fcff";
+      for (let i = 0; i < 7; i++) {
+        const x = L * (0.45 - i * 0.18);
+        ctx.beginPath();
+        ctx.arc(x, B * (0.42 - Math.abs(i - 3) * 0.04), B * 0.07, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
   }
 
   private fishBody(ctx: CanvasRenderingContext2D, L: number, B: number): void {
@@ -350,9 +434,9 @@ export class Fish {
     x1: number,
     wag: number,
     spread: number,
-    h: number,
+    color: string,
   ): void {
-    ctx.strokeStyle = `hsl(${h} 60% 30% / 0.35)`;
+    ctx.strokeStyle = color;
     ctx.lineWidth = Math.max(0.5, this.r * 0.03);
     ctx.beginPath();
     for (const t of [-0.8, -0.4, 0.4, 0.8]) {

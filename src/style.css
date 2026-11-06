@@ -369,3 +369,147 @@ canvas {
   text-align: center;
   color: #ffb4a8;
 }
+
+#menu .gold {
+  color: #ffd166;
+}
+
+/* a gold coin, drawn in CSS so it looks the same everywhere (emoji vary) */
+#menu .coin {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.25em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+  background: radial-gradient(circle at 35% 35%, #fff1a8, #ffc93c 45%, #c98a00);
+  box-shadow: inset 0 0 0 0.08em #a86f00;
+}
+
+#menu .shop-coins {
+  margin-left: 0.4em;
+  font-size: 17px;
+  font-weight: normal;
+}
+
+/* what each difficulty pays, under its name on the main menu */
+#menu .pick button .rate {
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  opacity: 0.85;
+}
+
+#menu .wallet-line {
+  margin: 0;
+  font-size: 20px;
+}
+
+#shop-preview {
+  width: 100%;
+  height: 150px;
+  border-radius: 12px;
+  background: linear-gradient(#2b8fd1, #1565a5);
+}
+
+#shop-picked {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 17px;
+}
+
+#menu #shop-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+#menu #shop-items h3 {
+  margin: 8px 0 6px;
+  text-align: left;
+}
+
+#menu .shop-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+#menu .shop-grid button {
+  font-size: 15px;
+  padding: 8px 4px;
+  line-height: 1.2;
+}
+
+#menu .shop-grid button .tag {
+  display: block;
+  font-size: 13px;
+  font-weight: normal;
+  opacity: 0.9;
+}
+
+#menu .shop-grid button.picked {
+  border-color: #ffd166;
+  background: rgba(255, 209, 102, 0.25);
+}
+
+#menu .shop-grid button.wearing .tag {
+  color: #9dffb0;
+  font-weight: bold;
+}
+
+#menu .shop-grid button.locked {
+  opacity: 0.75;
+}
+
+#menu .shop-grid button:hover,
+#menu .shop-grid button:focus-visible {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: #ffd166;
+  color: #fff;
+}
+
+#sync[hidden],
+#sync-out[hidden],
+#sync-in[hidden] {
+  display: none;
+}
+
+#menu .sync-help {
+  margin: 4px 0 8px;
+  font-size: 15px;
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+#sync-form {
+  display: flex;
+  gap: 6px;
+}
+
+#sync-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 18px; /* 16px or more, or iOS zooms in on focus */
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: rgba(0, 30, 60, 0.6);
+  color: #fff;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#menu #sync-form button {
+  font-size: 17px;
+  padding: 8px 14px;
+}
+
+#sync-error {
+  margin: 6px 0 0;
+  min-height: 1.2em;
+  color: #ffb4a8;
+  font-size: 15px;
+}
