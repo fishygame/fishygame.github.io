@@ -116,13 +116,15 @@ const CRAB_POINTS = 50; // for eating the crab in the frenzy
 // you can have had so far (coinAllowance), so none come until you eat and sitting still gets none. (Tried
 // and dropped the same day: growth alone, which gave whole games barely any coins, and one for every 3
 // fish eaten dropped right over you, which Thomas felt was too easy.) As a
-// bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
-// Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
+// bonus, the treasure chest on the sand bursts open three times (at CHEST_AT growth effort, or
+// CHEST_LEVELS in Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
 const COIN_DROPS = 40; // the most a game drops, on every difficulty; worth more the harder it is (COIN_RATE)
 const COIN_EVERY = [4, 6]; // seconds between coins, while growing keeps up
-const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
-const CHEST_LEVELS = [5, 10];
+// by growth effort, so they come along evenly with the fish you eat: the first soon after you start
+// growing, all three well before the frenzy (Thomas: at half and 80% of the bar, a good game never saw one)
+const CHEST_AT = [0.25, 0.5, 0.75];
+const CHEST_LEVELS = [3, 6, 9];
 const CHEST_COINS = 3;
 const POPUP_TIME = 1.2; // how long the "+100" floats up
 // Fish colors run from green through blue to pink, well clear of the player's orange (hue 26).
@@ -1594,7 +1596,7 @@ function sinkingCoins(dt: number): void {
     }
   }
   // the chest bursts open as you get far enough
-  const next = survival ? level >= CHEST_LEVELS[chestBursts] : progress() >= CHEST_AT[chestBursts];
+  const next = survival ? level >= CHEST_LEVELS[chestBursts] : growthEffort() >= CHEST_AT[chestBursts];
   if (chestBursts < CHEST_AT.length && next) burstChest();
 
   for (const c of sinking) {

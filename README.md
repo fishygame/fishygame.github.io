@@ -64,8 +64,9 @@ to the fishygame org.
   coin in water, tumbling end over end and drifting side to side, then rocks to a stop on the sand,
   rests there 5 s (flashing, faster and faster, for the last 1.6 s) and vanishes. Eat one for 100
   points ("+100") and coins as the menu says: 1 on Easy, 2 on Medium, 3 on Hard; in Speed it also
-  counts as a bite for the combo. As a bonus, the treasure chest on the sand bursts open twice a game
-  (at half and 80% of the growth bar; in Survival on reaching levels 5 and 10), flinging 3 coins up
+  counts as a bite for the combo. As a bonus, the treasure chest on the sand bursts open three times a game
+  (a quarter, half and three quarters of the way through the work of growing, so the first comes
+  after a handful of fish; in Survival on reaching levels 3, 6 and 9), flinging 3 coins up
   that sink the same way; you may not catch them all. In Survival they pay 2 coins each and no points
   (its score is time alive). A coin never hangs from a line, so it can't be mistaken for the hook's
   worm. (They replaced a clump of golden fish food. Tried and dropped on 2026-11-06: paying out by
@@ -77,8 +78,8 @@ to the fishygame org.
   so Easy is as much fun, but each is worth more the harder it is. Nothing just for playing. Survival
   pays 1 a level got through for levels 1-3, 2 for 4-6, 4 for 7-9, 6 for 10-12, then 8, at most 40
   for levels in one game, plus 2 per chest coin caught; the level banner shows each level's coins.
-- **The most one game can pay:** Classic/Speed (10 + 6 win + 40 + 6 chest) x rate = **62 on Easy, 124
-  on Medium, 186 on Hard**; Survival 40 + 12 = **52**. Nobody catches every coin, and a Hard win takes
+- **The most one game can pay:** Classic/Speed (10 + 6 win + 40 + 9 chest) x rate = **65 on Easy, 130
+  on Medium, 195 on Hard**; Survival 40 + 18 = **58**. Nobody catches every coin, and a Hard win takes
   a strong player 8-9 minutes (an Easy win about 3; from the live Speed boards). The shop is 4,960
   coins in all; the cheapest things are 50 and the Crown, the priciest, is 1,000. (Prices went from 6,550 to 13,100 and pay from x1 to x5
   and x3 while Thomas tuned it on 2026-11-06; this is the x3 pace with a coin worth what the menu
