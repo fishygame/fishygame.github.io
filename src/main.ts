@@ -1272,9 +1272,14 @@ function ending(): End {
   return killer?.kind === "shark" ? "shark" : "fish";
 }
 
-/** A Speed or Survival board entry's time, or a dash for Speed scores saved before times were kept. */
+/** A Speed or Survival board entry's time, or a dash for Speed scores saved before times were kept.
+ * Survival adds the level reached ("L9 · 2:42"), worked out from the time: levels have been
+ * SURVIVAL_LEVEL long since Survival launched, and times are whole seconds rounded down, so it's
+ * exact for every score. (If the level length ever changes, save the level with the score then.) */
 function boardTime(entry: Entry): string {
-  return entry.time === undefined ? "—" : clock(entry.time);
+  if (entry.time === undefined) return "—";
+  if (mode === "survival") return `L${1 + Math.floor(entry.time / SURVIVAL_LEVEL)} · ${clock(entry.time)}`;
+  return clock(entry.time);
 }
 
 /** Skipping saves nothing, on either board: a score only goes up with a name on it. */
@@ -2113,7 +2118,7 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
 /** Half a board's width on the end screen: room for the rank, name, ending and score, and on
  * Speed and Survival boards the time too. */
 function boardHalf(): number {
-  return Math.min(timed() ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
+  return Math.min(mode === "survival" ? 250 : timed() ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
 }
 
 // The end screen from the title's top to the Main menu button's bottom, besides the board's rows.
@@ -2183,7 +2188,8 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
         ctx.globalAlpha = 1;
       }
       // squeezed if it would run into the time or score (a narrow board)
-      const room = (speed ? timeX - 40 : left + half * 2 - 100) - (left + 166);
+      const timeW = speed ? ctx.measureText(boardTime(entry)).width + 8 : 0;
+      const room = (speed ? timeX - timeW : left + half * 2 - 100) - (left + 166);
       ctx.fillText(END_LABEL[entry.end], left + 160, rowY, Math.min(96, room));
       ctx.restore();
     }
