@@ -350,6 +350,8 @@ let coinTimer = 0;
 let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
 let coinsCaught = 0;
 let coinsEarned = 0; // what the game that just ended paid, for the end screen
+let hudCoins = 0; // the coins shown in the corner, so it can pop when they go up
+let hudCoinsAt = -Infinity;
 const wallet = new Wallet();
 const trail = new Trail();
 let trailKind: TrailKind | null = null; // the hero's, for this game
@@ -377,6 +379,8 @@ function reset(): void {
   trail.clear();
   coinsCaught = 0;
   coinsEarned = 0;
+  hudCoins = 0;
+  hudCoinsAt = -Infinity;
   fish = [];
   score = 0;
   spawnTimer = 0;
@@ -1754,7 +1758,14 @@ function drawHud(): void {
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   const speed = mode === "speed";
-  ctx.fillText(timed() ? `Score: ${score} · ${clock(elapsed())}` : `Score: ${score}`, 16, 14);
+  const scoreText = timed() ? `Score: ${score} · ${clock(elapsed())}` : `Score: ${score}`;
+  ctx.fillText(scoreText, 16, 14);
+  // the coins this game has paid so far, next to the score; on a screen too narrow for that (the
+  // corner buttons take the top right), on the line under the growth bar instead
+  const coins = wallet.name ? hudCoinCount() : null; // Guests earn none, so they don't see it
+  const coinsX = 16 + ctx.measureText(scoreText).width + 14;
+  const coinsUnder = coins !== null && coinsX + hudCoinsWidth(coins) > buttonPos("pause").x - BUTTON_R - 12;
+  if (coins !== null && !coinsUnder) drawHudCoins(coins, coinsX, 24);
 
   // growth bar toward the win size; in Survival, toward the next level
   const barW = 200;
@@ -1769,11 +1780,17 @@ function drawHud(): void {
     ctx.font = "bold 18px system-ui, sans-serif";
     const label = `Level ${level}`;
     ctx.fillText(label, 16, 62);
+    let end = 16 + ctx.measureText(label).width;
     const x = stillMultiplier();
     if (x > 1) {
       ctx.fillStyle = "#ffd166";
-      ctx.fillText(` · Still x${x}`, 16 + ctx.measureText(label).width, 62);
+      const still = ` · Still x${x}`;
+      ctx.fillText(still, end, 62);
+      end += ctx.measureText(still).width;
     }
+    if (coinsUnder) drawHudCoins(coins!, end + 14, 71);
+  } else if (coinsUnder) {
+    drawHudCoins(coins!, 16, speed ? 78 : 72);
   }
 
   // Speed: the combo, with a bar under the growth bar for the time left to keep it going
@@ -1793,7 +1810,39 @@ function drawHud(): void {
   const hint = touchUI
     ? "Drag anywhere to swim"
     : `Arrows / WASD to swim · Space to pause · N for the next song · M to ${mute}`;
-  ctx.fillText(hint, 16, mode === "survival" ? 88 : speed ? 72 : 66);
+  const hintY = mode === "survival" ? 88 : speed ? 72 : 66;
+  ctx.fillText(hint, 16, mode !== "survival" && coinsUnder ? hintY + 22 : hintY);
+  ctx.restore();
+}
+
+/** The coins this game has paid so far; noting when they go up, so the counter can pop. */
+function hudCoinCount(): number {
+  const n = gameOver() ? coinsEarned : gameCoins();
+  if (n > hudCoins) hudCoinsAt = time;
+  hudCoins = n;
+  return n;
+}
+
+function hudCoinsWidth(n: number): number {
+  ctx.save();
+  ctx.font = "bold 20px system-ui, sans-serif";
+  const w = 20 + ctx.measureText(`+${n}`).width;
+  ctx.restore();
+  return w;
+}
+
+/** "+23" with a coin in front, its middle at (x, y); it pops for a moment when it goes up. */
+function drawHudCoins(n: number, x: number, y: number): void {
+  ctx.save();
+  ctx.font = "bold 20px system-ui, sans-serif";
+  const label = `+${n}`;
+  const pop = 1 + 0.35 * Math.max(0, 1 - (time - hudCoinsAt) / 0.35);
+  ctx.translate(x, y);
+  ctx.scale(pop, pop);
+  drawCoin(7, 0, 8);
+  ctx.fillStyle = "#ffd166";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, 20, 1);
   ctx.restore();
 }
 

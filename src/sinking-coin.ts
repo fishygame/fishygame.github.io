@@ -6,8 +6,9 @@
 
 const SINK_SPEED = 48; // px/s on average; faster edge-on, slower face-on, like a coin in water
 const DRIFT = 16; // px of side-to-side drift as it sinks
-const REST = 5; // seconds it sits on the sand before fading
-const FADE = 1;
+const REST = 5; // seconds it sits on the sand, then it's gone
+const BLINK = 1.6; // the last of those it flashes, faster and faster, to warn it's about to go (Thomas)
+const FLASHES = 5;
 const RADIUS = 13; // for eating it; a little generous, so a near miss still counts
 const R = 10; // the coin as drawn
 const THICK = 2.6; // its edge, seen when it's side-on
@@ -31,7 +32,7 @@ export class SinkingCoin {
     this.born = born;
   }
 
-  /** Flutter down, settle on the sand, then fade. Returns false once it's gone. */
+  /** Flutter down, settle on the sand, flash, then vanish. Returns false once it's gone. */
   update(dt: number, time: number, sandTop: number): boolean {
     if (this.eaten) return false;
     if (this.landedAt === null) {
@@ -48,12 +49,12 @@ export class SinkingCoin {
       }
       return true;
     }
-    return time - this.landedAt < REST + FADE;
+    return time - this.landedAt < REST;
   }
 
-  /** A circle you can bite, or null once it's fading away. */
+  /** A circle you can bite, flashing or not, until it's gone. */
   hitbox(time: number): { x0: number; x1: number; y: number; radius: number } | null {
-    if (this.landedAt !== null && time - this.landedAt > REST) return null;
+    if (this.landedAt !== null && time - this.landedAt >= REST) return null;
     return { x0: this.x, x1: this.x, y: this.y, radius: RADIUS };
   }
 
@@ -66,9 +67,17 @@ export class SinkingCoin {
     return rest + (this.landFlip - rest) * Math.exp(-5 * t) * Math.cos(t * 16);
   }
 
+  /** 1 normally; in its last moments on the sand, on and off, the flashes coming quicker each time. */
+  private blink(time: number): number {
+    if (this.landedAt === null) return 1;
+    const u = (time - this.landedAt - (REST - BLINK)) / BLINK; // 0 to 1 over the blinking
+    if (u <= 0) return 1;
+    const phase = Math.pow(Math.min(1, u), 1.5) * FLASHES; // speeds up toward the end
+    return phase % 1 < 0.5 ? 0.15 : 1;
+  }
+
   draw(ctx: CanvasRenderingContext2D, time: number): void {
-    const fading = this.landedAt === null ? 0 : Math.max(0, time - this.landedAt - REST) / FADE;
-    const alpha = 1 - Math.min(1, fading);
+    const alpha = this.blink(time);
     const a = this.angle(time);
     const c = Math.cos(a);
     const s = Math.sin(a);

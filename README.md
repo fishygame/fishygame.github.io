@@ -59,14 +59,14 @@ to the fishygame org.
   you're in the frenzy, when you bite through the line instead.
 - In Classic and Speed, a single gold coin drops in from the surface every 13-20 s (the first
   5-8 s in) and flutters down like a real coin in water, tumbling end over end and drifting side to
-  side, then rocks to a stop on the sand and rests there a few seconds. Eat it for 100 points, shown
+  side, then rocks to a stop on the sand, rests there 5 s (flashing, faster and faster, for the last 1.6 s) and vanishes. Eat it for 100 points, shown
   as a gold "+100"; in Speed it also counts as a bite for the combo. It never hangs from a line, so
   it can't be mistaken for the hook's worm. Not in Survival. (It replaced a clump of fish food worth
   300 points and 6 coins every 40-60 s, so a game pays about the same.)
 - Coins and the shop (called the Treasure Chest in the game): every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
   a win and 2 per sinking coin caught (Survival: nothing for playing, then 1 a level got through for levels 1-3, 2
   for 4-6, 4 for 7-9, 6 for 10-12, then 8; the level banner shows each level's coins), times the difficulty (Easy x0.5,
-  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The High Scores
+  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. In play, a named player sees the coins the game has paid so far ("+23", popping as it goes up) next to the score, or under the growth bar on a narrow screen. The High Scores
   screen shows each player's fish in their outfit next to their name (from their wallet; a plain
   fish if they have none); point at (or tap) one to see it big. The Treasure Chest keeps your coins,
   your fish and the Buy button in view while the items scroll, beside them on a wide screen. The Shop sells
