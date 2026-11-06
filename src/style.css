@@ -82,7 +82,7 @@ canvas {
   margin: 0 auto 8px;
   padding: 0;
   width: 100%;
-  max-width: 360px;
+  max-width: 470px;
   list-style: none;
   font-size: 20px;
 }
@@ -115,7 +115,7 @@ canvas {
 }
 
 #menu ol li .name {
-  flex: 0 1 6.6em; /* shrinks (with an ellipsis) rather than push the score off a phone */
+  flex: 0 1 auto; /* only as wide as the name; on a small phone how it ended gives way first */
   min-width: 3.5em;
   text-align: left;
   overflow: hidden;
@@ -124,8 +124,8 @@ canvas {
 }
 
 #menu ol li .end {
-  flex: 1;
-  min-width: 0;
+  flex: 1 6 auto;
+  min-width: 2.5em;
   text-align: left;
   font-size: 15px;
   white-space: nowrap;
@@ -156,7 +156,7 @@ canvas {
     font-size: 17px;
   }
   #menu ol li {
-    gap: 8px;
+    gap: 6px;
   }
   #menu ol li .end,
   #menu ol li .time {
@@ -441,6 +441,33 @@ canvas {
   font-size: 17px;
 }
 
+/* a buy you can make: green, with a dollar badge */
+#menu #shop-action.buy {
+  background: #2fb84f;
+  border-color: #9dffb0;
+  color: #fff;
+}
+
+#menu #shop-action.buy:hover,
+#menu #shop-action.buy:focus-visible {
+  background: #3fd162;
+  color: #fff;
+}
+
+#menu #shop-action .dollar {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.35em;
+  border-radius: 50%;
+  line-height: 1.15em;
+  text-align: center;
+  font-size: 0.9em;
+  background: #fff;
+  color: #1f8a3a;
+  vertical-align: 0.05em;
+}
+
 #menu #shop-action:disabled {
   opacity: 0.55;
   cursor: default;
@@ -480,6 +507,16 @@ canvas {
 #menu .shop-grid button.wearing .tag {
   color: #9dffb0;
   font-weight: bold;
+}
+
+/* you can afford it: green border */
+#menu .shop-grid button.affordable:not(.picked) {
+  border-color: #4cd964;
+}
+
+/* yours but not on: green name and tag */
+#menu .shop-grid button.owned {
+  color: #9dffb0;
 }
 
 #menu .shop-grid button.locked {
@@ -656,6 +693,10 @@ canvas {
 }
 
 /* a wide screen: the shop gets a wider window, fish on the left and items beside it */
+#menu.roomy {
+  width: min(520px, calc(100vw - 32px));
+}
+
 #menu.wide {
   width: min(860px, calc(100vw - 32px));
 }

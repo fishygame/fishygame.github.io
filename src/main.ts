@@ -520,6 +520,7 @@ function showMenu(): void {
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
   menu.classList.toggle("wide", name === "shop"); // a wider window for the shop on a big screen
+  menu.classList.toggle("roomy", name === "scores"); // room for the fish, how it ended and the time
   hideFishZoom();
   if (name === "scores") loadMenuScores();
   if (name === "players") {
@@ -960,6 +961,8 @@ function renderShop(): void {
       b.classList.toggle("picked", picked === item.id);
       b.classList.toggle("wearing", wearing);
       b.classList.toggle("locked", !owned && balance < item.price);
+      b.classList.toggle("affordable", !owned && !!wallet.name && balance >= item.price);
+      b.classList.toggle("owned", owned && !wearing);
       const tag = document.createElement("span");
       tag.className = "tag";
       if (wearing) tag.textContent = "Wearing";
@@ -979,6 +982,7 @@ function renderShop(): void {
   const item = ITEMS.find((i) => i.id === picked);
   const pickedLine = document.getElementById("shop-picked")!;
   shopActionButton.disabled = false;
+  shopActionButton.classList.remove("buy");
   if (!item) {
     pickedLine.textContent = "";
     shopActionButton.textContent = "Tap something to try it on";
@@ -995,7 +999,11 @@ function renderShop(): void {
     shopActionButton.disabled = true;
   } else if (balance >= item.price) {
     pickedLine.textContent = item.name;
-    shopActionButton.textContent = `Buy it for ${item.price.toLocaleString()} coins`;
+    const dollar = document.createElement("span");
+    dollar.className = "dollar";
+    dollar.textContent = "$";
+    shopActionButton.replaceChildren(dollar, `Buy it for ${item.price.toLocaleString()} coins`);
+    shopActionButton.classList.add("buy");
   } else {
     pickedLine.textContent = item.name;
     shopActionButton.textContent = `${(item.price - balance).toLocaleString()} more coins to go!`;
