@@ -543,11 +543,19 @@ canvas {
   opacity: 0.9;
 }
 
-/* Start Game stands out from the other menu buttons: thicker, solid border and bigger, heavier text */
+/* Start Game stands out from the other menu buttons, always: gold, a thick white border and
+   bigger, heavier text (Thomas liked how it looked with keyboard focus, so it looks like that all the time) */
 #menu #start-button {
   font-size: 24px;
   font-weight: 900;
   border: 4px solid #fff;
+  background: #ffd166;
+  color: #3a2a00;
+}
+
+#menu #start-button:hover,
+#menu #start-button:focus-visible {
+  background: #ffe08f;
 }
 
 /* the main menu's "Playing as ..." */
