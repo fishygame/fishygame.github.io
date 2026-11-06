@@ -111,15 +111,17 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
-// Sinking coins (Thomas, 2026-11-06). A game has a fixed most it can pay, and growing pays it out,
-// not time: in Classic/Speed up to COIN_DROPS coins fall from the surface, the k-th once you're
-// k/(COIN_DROPS + 1) of the way there by eating (see growthEffort), so hanging around small earns
-// nothing more. On top of that, as a
+// Sinking coins (Thomas, 2026-11-06). Eating pays them out, not time, so hanging around earns nothing:
+// in Classic/Speed a coin falls for every BITES_PER_COIN fish you eat, up to COIN_DROPS a game, dropping
+// in above you so it comes your way. (Earlier tries went by growth; the first coin came far too late,
+// and Thomas played whole Easy and Hard games seeing barely any: "more frustrating than fun".) As a
 // bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
 // Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
-const COIN_DROPS = 10; // on every difficulty; they're worth more the harder it is (COIN_RATE)
-const COIN_GAP = 5; // seconds at least between two dropped coins, so a growth spurt doesn't rain them
+const COIN_DROPS = 40; // the most a game drops, on every difficulty; worth more the harder it is (COIN_RATE)
+const BITES_PER_COIN = 3;
+const COIN_GAP = 2; // seconds at least between two, so a feeding spree doesn't dump them all at once
+const COIN_NEAR = 250; // px either side of you that a coin drops in
 const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
 const CHEST_LEVELS = [5, 10];
 const CHEST_COINS = 3;
@@ -353,6 +355,7 @@ let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
 let sinking: SinkingCoin[] = [];
 let coinsDropped = 0; // from the surface this game
+let bites = 0; // fish eaten this game
 let lastDropAt = -Infinity;
 let chestBursts = 0; // this game
 let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
@@ -360,6 +363,7 @@ let coinsCaught = 0;
 let coinsEarned = 0; // what the game that just ended paid, for the end screen
 let hudCoins = 0; // the coins shown in the corner, so it can pop when they go up
 let hudCoinsAt = -Infinity;
+let coinsAtStart = 0; // the player's coins when this game began, so the corner shows their total
 const wallet = new Wallet();
 const trail = new Trail();
 let trailKind: TrailKind | null = null; // the hero's, for this game
@@ -389,6 +393,7 @@ function reset(): void {
   coinsEarned = 0;
   hudCoins = 0;
   hudCoinsAt = -Infinity;
+  coinsAtStart = wallet.name ? wallet.balance() : 0;
   fish = [];
   score = 0;
   spawnTimer = 0;
@@ -412,6 +417,7 @@ function reset(): void {
   sinking = [];
   popups = [];
   coinsDropped = 0;
+  bites = 0;
   lastDropAt = -Infinity;
   chestBursts = 0;
   myRanks = { week: -1, all: -1, players: -1 };
@@ -1553,6 +1559,7 @@ function update(dt: number): void {
         sound.eat(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
         score += bitePoints(Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3)));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
+        bites++;
         fish.splice(i, 1);
         if (player.r >= winRadius()) {
           endGame("won");
@@ -1576,10 +1583,11 @@ function sinkingCoins(): void {
   if (
     !survival &&
     coinsDropped < COIN_DROPS &&
-    growthEffort() >= (coinsDropped + 1) / (COIN_DROPS + 1) &&
+    bites >= (coinsDropped + 1) * BITES_PER_COIN &&
     time - lastDropAt >= COIN_GAP
   ) {
-    sinking.push(new SinkingCoin(W * (0.1 + 0.8 * Math.random()), time));
+    const x = player.x + (Math.random() * 2 - 1) * COIN_NEAR;
+    sinking.push(new SinkingCoin(Math.max(W * 0.06, Math.min(W * 0.94, x)), time));
     coinsDropped++;
     lastDropAt = time;
   }
@@ -1703,15 +1711,6 @@ function news(before: Ramp, after: Ramp): string {
 /** How far you are from starting size (0) to winning size (1). */
 function progress(): number {
   return Math.min(1, (player.r - START_RADIUS) / (winRadius() - START_RADIUS));
-}
-
-/** How far through the work of growing you are, 0 to 1. Each bite adds a share of your size, so the
- * growth bar crawls at first and races at the end (on a big screen a fifth of the game's eating barely
- * moves it); this counts in those shares instead, so it moves about evenly with the fish you eat.
- * Coins are paid out on it: the first coin went by the bar at first, and Thomas got to 3,732 on Easy
- * without seeing one (2026-11-06). */
-function growthEffort(): number {
-  return Math.min(1, Math.log(player.r / START_RADIUS) / Math.log(winRadius() / START_RADIUS));
 }
 
 function foodShare(): number {
@@ -1870,26 +1869,41 @@ function hudCoinCount(): number {
   return n;
 }
 
+// The corner shows the player's whole pile of coins, with what this game has added after it
+// ("1,240 +45"). Thomas, 2026-11-06: a lone "+3" carried into a new game looked like leftovers.
+function hudCoinsText(n: number): { total: string; plus: string } {
+  return { total: (coinsAtStart + n).toLocaleString(), plus: n ? ` +${n.toLocaleString()}` : "" };
+}
+
 function hudCoinsWidth(n: number): number {
+  const { total, plus } = hudCoinsText(n);
   ctx.save();
   ctx.font = "bold 20px system-ui, sans-serif";
-  const w = 20 + ctx.measureText(`+${n}`).width;
+  let w = 20 + ctx.measureText(total).width;
+  ctx.font = "bold 16px system-ui, sans-serif";
+  w += ctx.measureText(plus).width;
   ctx.restore();
   return w;
 }
 
-/** "+23" with a coin in front, its middle at (x, y); it pops for a moment when it goes up. */
+/** A coin, the total, and this game's "+45", its middle at (x, y); it pops a moment when it goes up. */
 function drawHudCoins(n: number, x: number, y: number): void {
+  const { total, plus } = hudCoinsText(n);
   ctx.save();
-  ctx.font = "bold 20px system-ui, sans-serif";
-  const label = `+${n}`;
   const pop = 1 + 0.35 * Math.max(0, 1 - (time - hudCoinsAt) / 0.35);
   ctx.translate(x, y);
   ctx.scale(pop, pop);
   drawCoin(7, 0, 8);
-  ctx.fillStyle = "#ffd166";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, 20, 1);
+  ctx.font = "bold 20px system-ui, sans-serif";
+  ctx.fillStyle = "#ffd166";
+  ctx.fillText(total, 20, 1);
+  if (plus) {
+    const at = 20 + ctx.measureText(total).width;
+    ctx.font = "bold 16px system-ui, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(plus, at, 2);
+  }
   ctx.restore();
 }
 

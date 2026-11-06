@@ -5,14 +5,14 @@
 // clump of golden fish food.) A coin never hangs from a line, so it can't be mistaken for the hook's
 // worm: shiny and loose is treasure, a worm on a line is death.
 
-const SINK_SPEED = 48; // px/s on average; faster edge-on, slower face-on, like a coin in water
+const SINK_SPEED = 80; // px/s on average (48 felt like forever on a tall screen); faster edge-on, slower face-on, like a coin in water
 const DRIFT = 16; // px of side-to-side drift as it sinks
 const REST = 5; // seconds it sits on the sand, then it's gone
 const BLINK = 1.6; // the last of those it flashes, faster and faster, to warn it's about to go (Thomas)
 const FLASHES = 5;
-const RADIUS = 13; // for eating it; a little generous, so a near miss still counts
-const R = 10; // the coin as drawn
-const THICK = 2.6; // its edge, seen when it's side-on
+const RADIUS = 18; // for eating it; a little generous, so a near miss still counts
+const R = 13; // the coin as drawn (10 was easy to miss on a big screen)
+const THICK = 3.4; // its edge, seen when it's side-on
 const SETTLE = 0.9; // seconds it rocks on the sand before lying still
 const WATER_PULL = 520; // px/s² slowing a coin flung up out of the chest, then pulling it back down
 
@@ -111,12 +111,12 @@ export class SinkingCoin {
 
     // soft golden glow, gently pulsing, so it stands out against busy water
     const pulse = 0.75 + 0.25 * Math.sin(time * 4 + this.seed);
-    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 24 * pulse);
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 30 * pulse);
     glow.addColorStop(0, "rgba(255, 220, 90, 0.5)");
     glow.addColorStop(1, "rgba(255, 220, 90, 0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(0, 0, 24 * pulse, 0, Math.PI * 2);
+    ctx.arc(0, 0, 30 * pulse, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.rotate(tilt);
@@ -143,10 +143,11 @@ export class SinkingCoin {
     // rim and the raised fish stamped on it, squashed with the face
     ctx.save();
     ctx.scale(w * (c < 0 ? -1 : 1), 1); // the back shows the fish swimming the other way
+    ctx.scale(R / 10, R / 10); // the rim and stamp below are drawn for a coin of radius 10
     ctx.strokeStyle = shade("#b9770e", lit);
     ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.arc(0, 0, R - 2.2, 0, Math.PI * 2);
+    ctx.arc(0, 0, 7.8, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = shade("#d99a12", lit);
     ctx.beginPath();
