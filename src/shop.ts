@@ -62,25 +62,25 @@ export const SLOT_LABEL: Record<Slot, string> = { look: "Looks", hat: "Hats", tr
 
 // What a game pays, before the difficulty, times its rate (Thomas, 2026-11-06): every difficulty
 // drops the same coins, so Easy is as much fun, but each is worth more the harder it is. Everything
-// was raised fivefold after Thomas found a whole game paid next to nothing ("I don't think someone
-// should have to play 35 freaking hours"); the shop math is in the README. Survival counts as Medium
+// is three times what it first was: x1 paid next to nothing ("I don't think someone should have to
+// play 35 freaking hours"), x5 felt too easy, so Thomas picked the middle. The shop math is in the README. Survival counts as Medium
 // for the coins you catch; its levels pay by levelCoins below.
 export const COIN_RATE: Record<Difficulty, number> = { easy: 1, medium: 2, hard: 3 };
 export const SURVIVAL_RATE = 2;
 export const GAME_COINS = 0; // nothing just for playing: in the corner it looked like coins left over from the last game (Thomas)
-export const PROGRESS_COINS = 50; // for filling the growth bar (Classic and Speed): 5 per tenth
-export const WIN_COINS = 30;
-export const COIN_VALUE = 5; // per coin caught (falling or from the chest), times the rate
+export const PROGRESS_COINS = 30; // for filling the growth bar (Classic and Speed): 3 per tenth
+export const WIN_COINS = 18;
+export const COIN_VALUE = 3; // per coin caught (falling or from the chest), times the rate
 // Survival pays for each level you get through, more the deeper it gets (Thomas, 2026-11-06), so
-// farming the easy early levels pays least: 5 a level for 1-3, 10 for 4-6, 20 for 7-9, 30 for 10-12,
-// then 40. Getting through 10 levels (Thomas's best, dying on level 11) pays 135.
+// farming the easy early levels pays least: 3 a level for 1-3, 6 for 4-6, 12 for 7-9, 18 for 10-12,
+// then 24. Getting through 10 levels (Thomas's best, dying on level 11) pays 81.
 export function levelCoins(level: number): number {
-  return level <= 3 ? 5 : level <= 6 ? 10 : level <= 9 ? 20 : level <= 12 ? 30 : 40;
+  return level <= 3 ? 3 : level <= 6 ? 6 : level <= 9 ? 12 : level <= 12 ? 18 : 24;
 }
 
 // The most Survival's levels pay in one game, reached getting through level 12 (about 4 minutes), so a
 // marathon run can't buy the shop: past that only the chest's bonus coins pay (Thomas, 2026-11-06).
-export const SURVIVAL_MAX = 200;
+export const SURVIVAL_MAX = 120;
 
 /** A Survival game's coins for its levels, ending on `level`: every level got through, up to
  * SURVIVAL_MAX. No coin just for playing, so dying on level 1 pays nothing. */

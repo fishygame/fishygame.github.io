@@ -111,17 +111,17 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
-// Sinking coins (Thomas, 2026-11-06). Eating pays them out, not time, so hanging around earns nothing:
-// in Classic/Speed a coin falls for every BITES_PER_COIN fish you eat, up to COIN_DROPS a game, dropping
-// in above you so it comes your way. (Earlier tries went by growth; the first coin came far too late,
-// and Thomas played whole Easy and Hard games seeing barely any: "more frustrating than fun".) As a
+// Sinking coins (Thomas, 2026-11-06). In Classic/Speed a coin drops in somewhere along the surface every
+// few seconds (COIN_EVERY), so you have to go and get it, up to COIN_DROPS a game. Growing sets how many
+// you can have had so far (coinAllowance), so sitting still runs dry after the first couple. (Tried
+// and dropped the same day: growth alone, which gave whole games barely any coins, and one for every 3
+// fish eaten dropped right over you, which Thomas felt was too easy.) As a
 // bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
 // Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
 const COIN_DROPS = 40; // the most a game drops, on every difficulty; worth more the harder it is (COIN_RATE)
-const BITES_PER_COIN = 3;
-const COIN_GAP = 2; // seconds at least between two, so a feeding spree doesn't dump them all at once
-const COIN_NEAR = 250; // px either side of you that a coin drops in
+const COIN_EVERY = [4, 6]; // seconds between coins, while growing keeps up
+const COIN_HEADSTART = 2; // coins you can have before growing at all, so the first come right away
 const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
 const CHEST_LEVELS = [5, 10];
 const CHEST_COINS = 3;
@@ -355,8 +355,7 @@ let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
 let sinking: SinkingCoin[] = [];
 let coinsDropped = 0; // from the surface this game
-let bites = 0; // fish eaten this game
-let lastDropAt = -Infinity;
+let coinTimer = 0;
 let chestBursts = 0; // this game
 let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
 let coinsCaught = 0;
@@ -417,8 +416,7 @@ function reset(): void {
   sinking = [];
   popups = [];
   coinsDropped = 0;
-  bites = 0;
-  lastDropAt = -Infinity;
+  coinTimer = between(COIN_EVERY);
   chestBursts = 0;
   myRanks = { week: -1, all: -1, players: -1 };
   syncUI();
@@ -1544,7 +1542,7 @@ function update(dt: number): void {
       return;
     }
   }
-  sinkingCoins();
+  sinkingCoins(dt);
 
   for (let i = fish.length - 1; i >= 0; i--) {
     const f = fish[i];
@@ -1559,7 +1557,6 @@ function update(dt: number): void {
         sound.eat(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
         score += bitePoints(Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3)));
         player.r = Math.sqrt(player.r ** 2 + f.r ** 2 * (inFrenzy() ? FRENZY_GROWTH : GROWTH));
-        bites++;
         fish.splice(i, 1);
         if (player.r >= winRadius()) {
           endGame("won");
@@ -1577,19 +1574,17 @@ function update(dt: number): void {
 }
 
 /** Drop coins as you grow (Classic/Speed), burst the chest when it's time, and pay for any eaten. */
-function sinkingCoins(): void {
+function sinkingCoins(dt: number): void {
   const survival = mode === "survival";
-  // Classic/Speed: the next coin falls once you've grown enough for it
-  if (
-    !survival &&
-    coinsDropped < COIN_DROPS &&
-    bites >= (coinsDropped + 1) * BITES_PER_COIN &&
-    time - lastDropAt >= COIN_GAP
-  ) {
-    const x = player.x + (Math.random() * 2 - 1) * COIN_NEAR;
-    sinking.push(new SinkingCoin(Math.max(W * 0.06, Math.min(W * 0.94, x)), time));
-    coinsDropped++;
-    lastDropAt = time;
+  // Classic/Speed: a coin every few seconds, anywhere along the surface, as long as you've grown
+  // enough for another; if you haven't, the next one waits until you have
+  if (!survival && coinsDropped < COIN_DROPS) {
+    coinTimer -= dt;
+    if (coinTimer <= 0 && coinsDropped < coinAllowance()) {
+      sinking.push(new SinkingCoin(W * (0.08 + 0.84 * Math.random()), time));
+      coinsDropped++;
+      coinTimer = between(COIN_EVERY);
+    }
   }
   // the chest bursts open as you get far enough
   const next = survival ? level >= CHEST_LEVELS[chestBursts] : progress() >= CHEST_AT[chestBursts];
@@ -1711,6 +1706,23 @@ function news(before: Ramp, after: Ramp): string {
 /** How far you are from starting size (0) to winning size (1). */
 function progress(): number {
   return Math.min(1, (player.r - START_RADIUS) / (winRadius() - START_RADIUS));
+}
+
+/** How far through the work of growing you are, 0 to 1. Each bite adds a share of your size, so the
+ * growth bar crawls at first and races at the end; this counts in those shares instead, so it moves
+ * about evenly with the fish you eat. */
+function growthEffort(): number {
+  return Math.min(1, Math.log(player.r / START_RADIUS) / Math.log(winRadius() / START_RADIUS));
+}
+
+/** How many sinking coins this game may have dropped by now: a couple to start, then more as you
+ * grow, reaching COIN_DROPS at the win, so sitting still can't keep them coming. */
+function coinAllowance(): number {
+  return COIN_HEADSTART + Math.floor(growthEffort() * (COIN_DROPS - COIN_HEADSTART));
+}
+
+function between([lo, hi]: number[]): number {
+  return lo + Math.random() * (hi - lo);
 }
 
 function foodShare(): number {

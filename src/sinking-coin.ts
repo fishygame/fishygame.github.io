@@ -10,9 +10,9 @@ const DRIFT = 16; // px of side-to-side drift as it sinks
 const REST = 5; // seconds it sits on the sand, then it's gone
 const BLINK = 1.6; // the last of those it flashes, faster and faster, to warn it's about to go (Thomas)
 const FLASHES = 5;
-const RADIUS = 18; // for eating it; a little generous, so a near miss still counts
-const R = 13; // the coin as drawn (10 was easy to miss on a big screen)
-const THICK = 3.4; // its edge, seen when it's side-on
+const RADIUS = 15; // for eating it; a little generous, so a near miss still counts
+const R = 11.5; // the coin as drawn (Thomas: 10 was a bit small, 13 a bit big)
+const THICK = 3; // its edge, seen when it's side-on
 const SETTLE = 0.9; // seconds it rocks on the sand before lying still
 const WATER_PULL = 520; // px/s² slowing a coin flung up out of the chest, then pulling it back down
 
@@ -111,12 +111,12 @@ export class SinkingCoin {
 
     // soft golden glow, gently pulsing, so it stands out against busy water
     const pulse = 0.75 + 0.25 * Math.sin(time * 4 + this.seed);
-    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 30 * pulse);
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 27 * pulse);
     glow.addColorStop(0, "rgba(255, 220, 90, 0.5)");
     glow.addColorStop(1, "rgba(255, 220, 90, 0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(0, 0, 30 * pulse, 0, Math.PI * 2);
+    ctx.arc(0, 0, 27 * pulse, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.rotate(tilt);

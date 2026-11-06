@@ -57,31 +57,33 @@ to the fishygame org.
   you and the screen fills with smaller fish: a feeding frenzy.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.
-- Sinking coins: in Classic and Speed, a gold coin drops in for every 3 fish you eat (up to 40 a game,
-  at least 2 s apart), the same on every difficulty, so eating pays them out and hanging around earns
-  nothing. Each drops in above you (within 250 px either side), so it comes your way, and flutters
-  down like a real coin in water, tumbling end over end and drifting side to side, then rocks to a
-  stop on the sand, rests there 5 s (flashing, faster and faster, for the last 1.6 s) and vanishes.
-  Eat one for 100 points ("+100") and 5 coins times the difficulty (Easy 5, Medium 10, Hard 15); in
-  Speed it also counts as a bite for the combo. As a bonus, the treasure chest on the sand bursts open
-  twice a game (at half and 80% of the growth bar; in Survival on reaching levels 5 and 10), flinging
-  3 coins up that sink the same way; you may not catch them all. In Survival they pay 10 coins each
-  and no points (its score is time alive). A coin never hangs from a line, so it can't be mistaken
-  for the hook's worm. (They replaced a clump of golden fish food. Earlier versions paid coins out by
-  growth and a fifth as much; Thomas found whole games paid next to nothing.)
-- Coins and the shop (called the Treasure Chest in the game): Classic and Speed pay 5 per tenth of
-  the growth bar, 30 for a win and 5 per coin caught, all times the difficulty (Easy x1, Medium x2,
+- Sinking coins: in Classic and Speed, a gold coin drops in somewhere along the surface every 4-6 s
+  (up to 40 a game, the same on every difficulty), so you have to go and get it. Growing sets how many
+  you can have had so far: 2 to start, then more as you grow, reaching 40 at the win, so sitting still
+  runs dry after the first couple. Each flutters down like a real coin in water, tumbling end over end
+  and drifting side to side, then rocks to a stop on the sand, rests there 5 s (flashing, faster and
+  faster, for the last 1.6 s) and vanishes. Eat one for 100 points ("+100") and 3 coins times the
+  difficulty (Easy 3, Medium 6, Hard 9); in Speed it also counts as a bite for the combo. As a bonus,
+  the treasure chest on the sand bursts open twice a game (at half and 80% of the growth bar; in
+  Survival on reaching levels 5 and 10), flinging 3 coins up that sink the same way; you may not catch
+  them all. In Survival they pay 6 coins each and no points (its score is time alive). A coin never
+  hangs from a line, so it can't be mistaken for the hook's worm. (They replaced a clump of golden fish
+  food. Tried and dropped on 2026-11-06: paying out by growth alone, which gave whole games barely any
+  coins, and a coin for every 3 fish dropped right above you, which was too easy.)
+- Coins and the shop (called the Treasure Chest in the game): Classic and Speed pay 3 per tenth of
+  the growth bar, 18 for a win and 3 per coin caught, all times the difficulty (Easy x1, Medium x2,
   Hard x3): every difficulty drops the same coins, so Easy is as much fun, but each is worth more the
   harder it is. Nothing just for playing (it showed up as coins before you'd done anything). Survival
-  pays 5 a level got through for levels 1-3, 10 for 4-6, 20 for 7-9, 30 for 10-12, then 40, at most
-  200 for levels in one game, plus 10 per chest coin caught; the level banner shows each level's coins.
-- **The most one game can pay:** Classic/Speed (50 + 30 win + 40 x 5 + 6 x 5 chest) x rate = **310
-  on Easy, 620 on Medium, 930 on Hard**; Survival 200 + 60 = **260**. Nobody catches every coin, and
-  a Hard win takes a strong player 8-9 minutes (an Easy win about 3; from the live Speed boards). The
+  pays 3 a level got through for levels 1-3, 6 for 4-6, 12 for 7-9, 18 for 10-12, then 24, at most
+  120 for levels in one game, plus 6 per chest coin caught; the level banner shows each level's coins.
+  (Pay was x1 of this at first, which Thomas found took forever, then x5, too easy; x3 is his middle.)
+- **The most one game can pay:** Classic/Speed (30 + 18 win + 40 x 3 + 6 x 3 chest) x rate = **186
+  on Easy, 372 on Medium, 558 on Hard**; Survival 120 + 36 = **156**. Nobody catches every coin, and a
+  Hard win takes a strong player 8-9 minutes (an Easy win about 3; from the live Speed boards). The
   shop is 13,100 coins in all; the cheapest things are 150. Estimates, to check against real play: a
-  kid eating steadily on Easy and dying partway earns roughly 30-40 coins a minute, more on Medium and
-  Hard, so the first thing in a game or two and everything in roughly 4-6 hours; strong players about
-  2-3 hours. To make it all faster or slower, change the prices in `ITEMS` (`src/shop.ts`). The main menu shows each difficulty's rate. In play, a named player sees their total coins with what this game has added after it ("1,285 +45", popping as it goes up) next to the score, or under the growth bar on a narrow screen. The High Scores
+  kid playing steadily earns roughly 20 coins a minute on Easy, more on Medium and Hard, so the first
+  thing in a few games and everything in roughly 8-12 hours; strong players about 4-5 hours. To make
+  it all faster or slower, change the prices in `ITEMS` (`src/shop.ts`). The main menu shows each difficulty's rate. In play, a named player sees their total coins with what this game has added after it ("1,285 +45", popping as it goes up) next to the score, or under the growth bar on a narrow screen. The High Scores
   screen shows each player's fish in their outfit next to their name (from their wallet; a plain
   fish if they have none); point at (or tap) one to see it big. The Treasure Chest keeps your coins,
   your fish and the Buy button in view while the items scroll, beside them on a wide screen. The Shop sells
