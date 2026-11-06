@@ -9,7 +9,8 @@
     "build:itch": "tsc && vite build --mode itch --outDir dist-itch && powershell -NoProfile -Command \"Compress-Archive -Path dist-itch/* -DestinationPath big-fish-frenzy-itch.zip -Force\"",
     "preview": "vite preview",
     "deploy": "npm run build && node deploy.js",
-    "deploy:itch": "npm run build:itch && butler push dist-itch tclark333/big-fish-frenzy:html5"
+    "deploy:itch": "npm run build:itch && butler push dist-itch tclark333/big-fish-frenzy:html5 && npm run deploy:source",
+    "deploy:source": "git archive -o dist-source.zip HEAD && butler push dist-source.zip tclark333/big-fish-frenzy:source"
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",

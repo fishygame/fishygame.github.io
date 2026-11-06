@@ -21,7 +21,11 @@ browser instead of the shared board. The two builds differ only in the settings 
 
 `npm run deploy:itch` builds it and uploads `dist-itch/` to https://tclark333.itch.io/big-fish-frenzy
 with [butler](https://itch.io/docs/butler/), itch.io's upload tool, on the `html5` channel. It
-needs butler on the PATH, signed in once with `butler login`.
+needs butler on the PATH, signed in once with `butler login`. It then runs `npm run deploy:source`,
+which zips the committed code (`git archive HEAD`, so commit first) and pushes it to the `source`
+channel, the page's download for anyone who wants to read the code. (A hand-uploaded build zip that
+no deploy replaced went three weeks stale there; uploads outside butler's channels can only be
+removed in the itch dashboard.)
 
 Deploying pushes with the GitHub CLI's active account (`gh auth status`), which needs write access
 to the fishygame org.
