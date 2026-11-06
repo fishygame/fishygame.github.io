@@ -72,6 +72,9 @@ to the fishygame org.
   family site each player's coins sync through the Lambda, so adding the same name on another
   device brings them along. Taking a player off a device saves their coins first. On itch,
   players go by initials and their coins stay in the browser.
+  Nobody should start over as a Guest: the first time a device loads with players, the name it
+  last saved a high score under becomes its player (once; `fishy-player-seeded`), and on a device
+  with no players a Guest who saves a high score becomes that name.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
@@ -150,6 +153,11 @@ merges a device's changes and returns the result. The merge only adds: each game
 (at most 200 coins), owned is a union, and the newest outfit wins; nothing new means no write.
 The game works out the balance (earned minus the prices of what's owned). Wallet syncs don't use
 the score cooldown. Deploy the Lambda before a game that syncs wallets.
+
+To test the Lambda without touching the real boards or wallets: `node server/dev/test.mjs` runs
+its checks against an in-memory table, and `node server/dev/serve.mjs` serves it on
+http://localhost:8787 for a dev server started with `VITE_SCORE_API=http://localhost:8787/`
+(in PowerShell: `$env:VITE_SCORE_API = "http://localhost:8787/"; npx vite --port 5174`).
 
 To wipe a board: `aws dynamodb delete-item --table-name fishy-high-scores --key '{"pk":{"S":"board"}}'`
 (or `board#speed#hard`, and so on)

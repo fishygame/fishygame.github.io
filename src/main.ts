@@ -1037,6 +1037,24 @@ if (LOCAL) {
 
 loadBoard().catch((err) => console.warn(err));
 
+// Someone who's been playing on this device before players existed (Hunter on his own computer)
+// shouldn't start over as a Guest: the name they last saved a high score under becomes their
+// player, once, the first time the game loads with players. If the server can't be reached, it
+// tries again next time.
+const SEEDED_KEY = "fishy-player-seeded";
+function seedPlayer(): void {
+  try {
+    if (localStorage.getItem(SEEDED_KEY) || wallet.players().length) return;
+    const name = savedName();
+    const done = () => localStorage.setItem(SEEDED_KEY, "1");
+    if (!name) return done();
+    wallet.addPlayer(name).then(done, (err) => console.warn(err));
+  } catch {
+    // storage blocked: Guest it is
+  }
+}
+seedPlayer();
+
 /** The name last saved on this device, or "" if none (or storage is blocked). */
 function savedName(): string {
   try {
@@ -1075,6 +1093,9 @@ form.addEventListener("submit", async (e) => {
     } catch {
       // not remembering the name is fine
     }
+    // a Guest on a device with no players yet (a kid's own computer) becomes that name from now on;
+    // with players already here (a shared iPad), the menu's who's playing is left alone
+    if (!wallet.name && !wallet.players().length) wallet.addPlayer(name).catch((err) => console.warn(err));
     closeForm();
   } catch (err) {
     formError.textContent = (err as Error).message;
