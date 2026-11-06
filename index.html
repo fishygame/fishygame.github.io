@@ -12,8 +12,8 @@
     <title>Big Fish Frenzy</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <script type="module" crossorigin src="./assets/index-CICes8Zo.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DG6bSmOK.css">
+    <script type="module" crossorigin src="./assets/index-DbxMKSJK.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BFVtBBju.css">
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -32,8 +32,10 @@
           <button data-value="hard">Hard</button>
         </div>
         <p class="pick-help"></p>
+        <!-- right above Start, so you see who you're playing as before you go; Start is always gold
+             so it can't be mistaken for this one (Thomas's son kept tapping this for Start) -->
         <button data-go="players" id="player-button">Who's playing?</button>
-        <button data-go="start">Start Game</button>
+        <button data-go="start" id="start-button">Start Game</button>
         <button data-go="shop">Treasure Chest <span class="shop-coins"><span class="coin"></span><span class="n">0</span></span></button>
         <button data-go="instructions">Instructions</button>
         <button data-go="scores">High Scores</button>
@@ -135,6 +137,6 @@
       <button type="submit">Save</button>
       <button type="button" id="hs-skip">Skip</button>
       <p id="hs-error"></p>
-    </form>
+    </form>
   </body>
 </html>
