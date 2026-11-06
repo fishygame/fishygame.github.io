@@ -1,6 +1,7 @@
-# Fishy
+# Big Fish Frenzy
 
-A small "eat smaller fish, avoid bigger fish" game built with TypeScript, HTML5 Canvas and Vite.
+Called Big Fish Frenzy on both the family site and itch since 2026-11-06 (the family site was
+"Fishy" before; the repo, its web address and the score boards keep the old name). A small "eat smaller fish, avoid bigger fish" game built with TypeScript, HTML5 Canvas and Vite.
 
 Play it at https://fishygame.github.io
 

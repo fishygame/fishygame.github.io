@@ -44,7 +44,10 @@ canvas {
 
 #menu h1 {
   margin: 0 0 16px;
-  font-size: 64px;
+  /* one line, as big as fits: "Big Fish Frenzy" is about 8 times its height wide, and the menu's
+     content is its width (at most 420px, less 16px a side on a phone) minus 48px of padding */
+  font-size: min(64px, calc((min(420px, 100vw - 32px) - 48px) / 8.4));
+  white-space: nowrap;
   color: #ffd166;
   letter-spacing: 0.02em;
 }
@@ -571,4 +574,34 @@ canvas {
   min-height: 1.2em;
   color: #ffb4a8;
   font-size: 15px;
+}
+
+/* a short screen (a small phone held upright): tighter menu, so it all fits without scrolling */
+@media (max-height: 700px) {
+  #menu {
+    padding-top: 14px;
+  }
+  #menu h1 {
+    margin-bottom: 10px;
+  }
+  #menu .screen {
+    gap: 8px;
+  }
+  #menu .screen > button {
+    padding: 8px;
+    font-size: 18px;
+  }
+  #menu .pick button {
+    padding: 6px;
+  }
+  #menu .pick-help {
+    min-height: 0;
+  }
+}
+
+/* a narrow screen: the Playing as line on one line */
+@media (max-width: 440px) {
+  #menu #player-button {
+    font-size: 15px;
+  }
 }

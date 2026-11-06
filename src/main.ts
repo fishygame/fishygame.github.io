@@ -497,7 +497,8 @@ function showScreen(name: string): void {
   }
   // Focus the screen's first menu button without jumping to it: on the Sound screen that's Back,
   // below the song list, and the menu should still open at the top.
-  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]`)?.focus({ preventScroll: true });
+  // (on the main menu that's Start Game, not the Playing as button above it)
+  if (!touchUI) menu.querySelector<HTMLButtonElement>(`[data-screen="${name}"] button[data-go]:not(#player-button)`)?.focus({ preventScroll: true });
   menu.scrollTop = 0;
 }
 
@@ -872,7 +873,7 @@ function renderPlayerButton(): void {
   if (!wallet.name) {
     const who = document.createElement("b");
     who.textContent = "Guest";
-    b.append("Playing as ", who, wallet.players().length ? " · Switch" : " · Add your name to collect coins");
+    b.append("Playing as ", who, wallet.players().length ? " · Switch" : " · Add your name for coins");
   } else {
     const who = document.createElement("b");
     who.textContent = wallet.name; // textContent, so names can't inject markup
