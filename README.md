@@ -64,10 +64,13 @@ to the fishygame org.
   a win and 6 per bait clump (Survival: 2 per level reached), times the difficulty (Easy x0.5,
   Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The Shop sells
   looks, hats and trails for your fish (cosmetics only, so the boards stay about skill), tried on
-  in a live preview. Prices are in `ITEMS` in `src/shop.ts`. On the family site, a username (no
-  password) keeps your coins on any device you sign in on; coins earned signed out join the
-  account on sign-in, and signing out starts the device over at 0. On itch, coins stay in the
-  browser.
+  in a live preview. Prices are in `ITEMS` in `src/shop.ts`.
+- Players: the main menu's "Playing as ..." picks who's playing, so a family can share one device
+  and each game's coins go to whoever earned them. Guest is always there, needs no name, and earns
+  no coins (its end screen says to add a name). A player is just a name, no password; on the
+  family site each player's coins sync through the Lambda, so adding the same name on another
+  device brings them along. Taking a player off a device saves their coins first. On itch,
+  players go by initials and their coins stay in the browser.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.

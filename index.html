@@ -30,6 +30,7 @@
           <button data-value="hard">Hard</button>
         </div>
         <p class="pick-help"></p>
+        <button data-go="players" id="player-button">Who's playing?</button>
         <button data-go="start">Start Game</button>
         <button data-go="shop">Shop <span class="shop-coins"><span class="coin"></span><span class="n">0</span></span></button>
         <button data-go="instructions">Instructions</button>
@@ -39,27 +40,25 @@
       <!-- coin shop: looks, hats and trails for your fish (cosmetics only) -->
       <div class="screen" data-screen="shop" hidden>
         <h2>Shop</h2>
-        <p class="wallet-line"><span class="coin"></span><b id="shop-balance">0</b> coins</p>
+        <p class="wallet-line"><span id="shop-who"></span><span class="coin"></span><b id="shop-balance">0</b> coins</p>
+        <p id="shop-nobody" class="sync-help" hidden>You're playing as a Guest. Add your name on the main menu to collect coins and buy things.</p>
         <canvas id="shop-preview"></canvas>
         <p id="shop-picked"></p>
         <button id="shop-action" data-shop="action">Pick something to try it on</button>
         <div id="shop-items"></div>
-        <div id="sync" hidden>
-          <h3>Keep your coins on every device</h3>
-          <div id="sync-out">
-            <p class="sync-help">Sign in with a username, like the name you use for high scores. There's no password, so anyone who knows it can use it.</p>
-            <form id="sync-form">
-              <input id="sync-name" maxlength="8" autocomplete="off" autocapitalize="words"
-                spellcheck="false" placeholder="Username" aria-label="Username" />
-              <button type="submit">Sign in</button>
-            </form>
-            <p id="sync-error"></p>
-          </div>
-          <div id="sync-in" hidden>
-            <p class="sync-help">Signed in as <b id="sync-who"></b>. Sign in with the same name on another device and your coins and stuff are there too.</p>
-            <button data-shop="signout">Sign out on this device</button>
-          </div>
-        </div>
+        <button data-go="main">Back</button>
+      </div>
+      <!-- who's playing on this device: coins go to them (a family can share an iPad) -->
+      <div class="screen" data-screen="players" hidden>
+        <h2>Who's playing?</h2>
+        <ul id="player-list"></ul>
+        <form id="add-player">
+          <input id="add-name" maxlength="8" autocomplete="off" autocapitalize="words"
+            spellcheck="false" placeholder="New player's name" aria-label="New player's name" />
+          <button type="submit">Add</button>
+        </form>
+        <p id="add-error"></p>
+        <p class="sync-help" id="players-help"></p>
         <button data-go="main">Back</button>
       </div>
       <div class="screen" data-screen="sound" hidden>
@@ -90,7 +89,7 @@
           <li>And keep away from the crab on the sand. Its pinch is deadly&hellip; unless you're big enough to eat it.</li>
           <li>Grow until you nearly fill the screen to win.</li>
           <li>Now and then, golden <b class="gold">fish food</b> sinks from the surface. Eat it for bonus points and coins! (Not in Survival.)</li>
-          <li><b class="gold">Coins:</b> every game earns some: more the further you get, and more on harder levels (Easy pays half, Hard pays double). Spend them in the Shop on looks, hats and trails for your fish.</li>
+          <li><b class="gold">Coins:</b> every game earns some: more the further you get, and more on harder levels (Easy pays half, Hard pays double). Spend them in the Shop on looks, hats and trails for your fish. Add your name under <i>Playing as</i> on the menu to collect them; Guests don't earn coins.</li>
           <li><b>Survival:</b> you never grow, and every fish is bigger than you, so just stay alive! It starts calm and gets harder every level: sharks, hooks, crabs, then more of them at once, and fish with <b class="danger">red eyes</b> that double back too. Holding still earns up to 5 times the points, if you dare.</li>
           <li><b>Easy</b> has no sharks or crab, and more to eat at the start. <b>Hard</b> has more sharks (and they all double back), more hooks and more crabs.</li>
           <li id="controls-help"></li>

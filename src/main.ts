@@ -485,6 +485,11 @@ function showMenu(): void {
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
   if (name === "scores") loadMenuScores();
+  if (name === "players") {
+    addError.textContent = "";
+    renderPlayers();
+    void wallet.sync();
+  }
   if (name === "shop") {
     picked = null;
     renderShop();
@@ -721,6 +726,13 @@ menu.addEventListener("click", (e) => {
     applyMusic();
   } else if (button.dataset.play) sound.playSong(button.dataset.play);
   else if (button.dataset.item) pickItem(button.dataset.item);
+  else if (button.dataset.player) {
+    wallet.switchTo(button.dataset.player);
+    showScreen("main"); // picked; on to the game
+  } else if (button.dataset.guest) {
+    wallet.playAsGuest();
+    showScreen("main");
+  } else if (button.dataset.remove) void removePlayer(button.dataset.remove);
   else if (button.dataset.shop) shopAction(button.dataset.shop);
   else if (kind === "eat") pickEatSound(button.dataset.value!);
   else if (kind === "period") pickPeriod(button.dataset.value!);
@@ -747,9 +759,10 @@ const shopItems = document.getElementById("shop-items") as HTMLDivElement;
 const shopActionButton = document.getElementById("shop-action") as HTMLButtonElement;
 const shopPreview = document.getElementById("shop-preview") as HTMLCanvasElement;
 const shopScreen = menu.querySelector<HTMLElement>('[data-screen="shop"]')!;
-const syncForm = document.getElementById("sync-form") as HTMLFormElement;
-const syncName = document.getElementById("sync-name") as HTMLInputElement;
-const syncError = document.getElementById("sync-error") as HTMLParagraphElement;
+const playerList = document.getElementById("player-list") as HTMLUListElement;
+const addForm = document.getElementById("add-player") as HTMLFormElement;
+const addName = document.getElementById("add-name") as HTMLInputElement;
+const addError = document.getElementById("add-error") as HTMLParagraphElement;
 let picked: string | null = null; // the item being tried on in the preview
 const previewFish = new Fish(0, 0, 0, 0, 46, 26);
 const previewTrail = new Trail();
@@ -762,8 +775,19 @@ for (const b of menu.querySelectorAll<HTMLButtonElement>('[data-screen="main"] .
   span.textContent = `coins x${rate === 0.5 ? "\u00BD" : rate}`;
   b.append(span);
 }
-syncName.maxLength = NAME_MAX;
-document.getElementById("sync")!.hidden = LOCAL; // itch keeps coins in the browser only
+addName.maxLength = NAME_MAX;
+if (LOCAL) {
+  // itch: players go by their initials, like its high scores
+  addName.placeholder = "Initials (ABC)";
+  addName.setAttribute("aria-label", "New player's initials");
+  addName.autocapitalize = "characters";
+  addName.addEventListener("input", () => {
+    addName.value = addName.value.toUpperCase().replace(/[^A-Z]/g, "");
+  });
+}
+document.getElementById("players-help")!.textContent = LOCAL
+  ? "Pick who's playing before each game, so the coins go to them."
+  : "Pick who's playing before each game, so the coins go to them. There are no passwords: add the same name on another device and your coins come along.";
 
 /** The outfit in the preview: what you're wearing, with the item being tried on swapped in. */
 function previewOutfit(): Record<Slot, string | null> {
@@ -777,6 +801,10 @@ function renderShop(): void {
   const balance = wallet.balance();
   for (const n of menu.querySelectorAll(".shop-coins .n")) n.textContent = balance.toLocaleString();
   document.getElementById("shop-balance")!.textContent = balance.toLocaleString();
+  document.getElementById("shop-who")!.textContent = wallet.name ? `${wallet.name}: ` : "";
+  document.getElementById("shop-nobody")!.hidden = !!wallet.name;
+  renderPlayerButton();
+  renderPlayers();
   if (shopScreen.hidden) return;
   // keep keyboard focus on the same item across the rebuild
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.item;
@@ -823,6 +851,10 @@ function renderShop(): void {
   } else if (wallet.owns(item.id)) {
     pickedLine.textContent = `${item.name}: it's yours`;
     shopActionButton.textContent = "Wear it";
+  } else if (!wallet.name) {
+    pickedLine.textContent = item.name;
+    shopActionButton.textContent = "Add your name to buy things";
+    shopActionButton.disabled = true;
   } else if (balance >= item.price) {
     pickedLine.textContent = item.name;
     shopActionButton.textContent = `Buy it for ${item.price.toLocaleString()} coins`;
@@ -831,11 +863,78 @@ function renderShop(): void {
     shopActionButton.textContent = `${(item.price - balance).toLocaleString()} more coins to go!`;
     shopActionButton.disabled = true;
   }
+}
 
-  const signedIn = !!wallet.name;
-  document.getElementById("sync-out")!.hidden = signedIn;
-  document.getElementById("sync-in")!.hidden = !signedIn;
-  document.getElementById("sync-who")!.textContent = wallet.name;
+/** The main menu's "Playing as Hunter · Switch", or a nudge to pick someone. */
+function renderPlayerButton(): void {
+  const b = document.getElementById("player-button")!;
+  b.innerHTML = "";
+  if (!wallet.name) {
+    const who = document.createElement("b");
+    who.textContent = "Guest";
+    b.append("Playing as ", who, wallet.players().length ? " · Switch" : " · Add your name to collect coins");
+  } else {
+    const who = document.createElement("b");
+    who.textContent = wallet.name; // textContent, so names can't inject markup
+    b.append("Playing as ", who, " \u00B7 Switch");
+  }
+}
+
+/** Who's playing: a row per player on this device (tap to play as them, \u00D7 to take them off). */
+function renderPlayers(): void {
+  if (menu.querySelector<HTMLElement>('[data-screen="players"]')!.hidden) return;
+  playerList.innerHTML = "";
+  for (const p of wallet.players()) {
+    const li = document.createElement("li");
+    const pick = document.createElement("button");
+    pick.className = "pick-player";
+    pick.dataset.player = p.key;
+    pick.setAttribute("aria-pressed", String(p.key === wallet.current));
+    const name = document.createElement("span");
+    name.textContent = p.name;
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    const coin = document.createElement("span");
+    coin.className = "coin";
+    tag.append(coin, p.balance.toLocaleString());
+    pick.append(name, tag);
+    const remove = document.createElement("button");
+    remove.className = "remove-player";
+    remove.dataset.remove = p.key;
+    remove.textContent = "\u00D7";
+    remove.setAttribute("aria-label", `Take ${p.name} off this device`);
+    li.append(pick, remove);
+    playerList.append(li);
+  }
+  // and Guest, always there, so nobody has to add a name just to play
+  const li = document.createElement("li");
+  const guest = document.createElement("button");
+  guest.className = "pick-player";
+  guest.dataset.guest = "1";
+  guest.setAttribute("aria-pressed", String(!wallet.current));
+  const name = document.createElement("span");
+  name.textContent = "Guest";
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = "no coins";
+  guest.append(name, tag);
+  li.append(guest);
+  playerList.append(li);
+}
+
+async function removePlayer(key: string): Promise<void> {
+  const p = wallet.players().find((x) => x.key === key);
+  if (!p) return;
+  const sure = LOCAL
+    ? `Take ${p.name} off this device? Their coins and stuff here will be gone.`
+    : `Take ${p.name} off this device? Their coins and stuff are saved, and come back if ${p.name} is added again.`;
+  if (!confirm(sure)) return;
+  addError.textContent = "";
+  try {
+    await wallet.removePlayer(key);
+  } catch (err) {
+    addError.textContent = (err as Error).message;
+  }
 }
 
 function pickItem(id: string): void {
@@ -844,10 +943,7 @@ function pickItem(id: string): void {
 }
 
 function shopAction(what: string): void {
-  if (what === "signout") {
-    if (confirm(`Sign out? Your coins stay with ${wallet.name}. This device starts again at 0 until you sign in.`)) wallet.signOut();
-    return;
-  }
+  if (what !== "action") return;
   const item = ITEMS.find((i) => i.id === picked);
   if (!item) return;
   if (wallet.wearing(item.slot) === item.id) wallet.wear(item.slot, null);
@@ -863,21 +959,17 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void wallet.sync();
 });
 
-syncForm.addEventListener("submit", async (e) => {
+addForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  syncError.textContent = "";
-  const button = syncForm.querySelector("button")!;
+  addError.textContent = "";
+  const button = addForm.querySelector("button")!;
   button.disabled = true;
   try {
-    await wallet.signIn(syncName.value);
-    syncName.value = "";
-    try {
-      localStorage.setItem(NAME_KEY, wallet.name); // the high score form fills it in too
-    } catch {
-      // fine
-    }
+    await wallet.addPlayer(addName.value);
+    addName.value = "";
+    showScreen("main"); // they're picked; on to the game
   } catch (err) {
-    syncError.textContent = (err as Error).message;
+    addError.textContent = (err as Error).message;
   } finally {
     button.disabled = false;
   }
@@ -946,7 +1038,7 @@ function openForm(): void {
   syncUI();
   form.hidden = false;
   formError.textContent = "";
-  nameInput.value = (!LOCAL && wallet.name) || savedName();
+  nameInput.value = wallet.name || savedName();
   if (!touchUI) nameInput.focus(); // on a tablet, let them tap it so the keyboard doesn't cover the board
 }
 
@@ -1328,7 +1420,7 @@ function bonusBait(dt: number): void {
     }
     score += BAIT_POINTS;
     baitsEaten++;
-    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, coins: baitCoins(), at: time });
+    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, coins: wallet.name ? baitCoins() : 0, at: time }); // Guests earn no coins
     sound.bonus();
   }
 }
@@ -1825,7 +1917,9 @@ function draw(): void {
 
   drawJoystick();
 
-  const again = `${coinsEarned ? `+${coinsEarned} coins · ` : ""}${touchUI ? "Tap" : "Click or press Space"}`;
+  // a Guest earns nothing, but hears what adding a name would get them
+  const coinLine = !coinsEarned ? "" : wallet.name ? `+${coinsEarned} coins · ` : "Add your name to collect coins! · ";
+  const again = `${coinLine}${touchUI ? "Tap" : "Click or press Space"}`;
   if (state === "dead") drawOverlay(hooked ? "You got caught!" : pinched ? "You got pinched!" : "You got eaten!", `${again} to try again`, true);
   if (paused) drawOverlay("Paused", `${touchUI ? "Tap" : "Press Space"} to keep swimming`);
   if (state === "won") drawOverlay("You're the biggest fish!", `${again} to play again`, true);

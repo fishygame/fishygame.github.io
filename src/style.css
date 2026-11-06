@@ -470,9 +470,7 @@ canvas {
   color: #fff;
 }
 
-#sync[hidden],
-#sync-out[hidden],
-#sync-in[hidden] {
+#shop-nobody[hidden] {
   display: none;
 }
 
@@ -483,12 +481,73 @@ canvas {
   opacity: 0.9;
 }
 
-#sync-form {
+/* the main menu's "Playing as ..." */
+#menu #player-button {
+  font-size: 17px;
+  font-weight: normal;
+  padding: 8px;
+}
+
+#menu #player-button b {
+  color: #ffd166;
+}
+
+#menu #player-button:hover b,
+#menu #player-button:focus-visible b {
+  color: inherit;
+}
+
+/* who's playing: a row per player (pick, or take off this device), then the add form */
+#menu #player-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#menu #player-list li {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+}
+
+#menu #player-list .pick-player {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  padding: 10px 14px;
+}
+
+#menu #player-list .pick-player .tag {
+  font-size: 15px;
+  font-weight: normal;
+}
+
+#menu #player-list .pick-player[aria-pressed="true"] {
+  background: #ffd166;
+  border-color: #ffd166;
+  color: #3a2a00;
+  text-shadow: none;
+}
+
+#menu #player-list .remove-player {
+  flex: none;
+  width: 48px;
+  font-size: 18px;
+  padding: 8px;
+}
+
+#add-player {
   display: flex;
   gap: 6px;
 }
 
-#sync-form input {
+#add-player input {
   flex: 1;
   min-width: 0;
   font: inherit;
@@ -502,13 +561,13 @@ canvas {
   -webkit-user-select: text;
 }
 
-#menu #sync-form button {
+#menu #add-player button {
   font-size: 17px;
-  padding: 8px 14px;
+  padding: 8px 16px;
 }
 
-#sync-error {
-  margin: 6px 0 0;
+#add-error {
+  margin: 0;
   min-height: 1.2em;
   color: #ffb4a8;
   font-size: 15px;
