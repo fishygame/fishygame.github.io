@@ -64,7 +64,7 @@ to the fishygame org.
   it can't be mistaken for the hook's worm. Not in Survival. (It replaced a clump of fish food worth
   300 points and 6 coins every 40-60 s, so a game pays about the same.)
 - Coins and the shop (called the Treasure Chest in the game): every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
-  a win and 2 per sinking coin caught (Survival: 1 for playing, plus 1 a level got through for levels 1-3, 2
+  a win and 2 per sinking coin caught (Survival: nothing for playing, then 1 a level got through for levels 1-3, 2
   for 4-6, 4 for 7-9, 6 for 10-12, then 8; the level banner shows each level's coins), times the difficulty (Easy x0.5,
   Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The High Scores
   screen shows each player's fish in their outfit next to their name (from their wallet; a plain

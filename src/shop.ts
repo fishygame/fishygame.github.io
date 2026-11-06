@@ -69,15 +69,16 @@ export const WIN_COINS = 6;
 export const COIN_VALUE = 2; // per sinking coin caught; even, so Easy's half is a whole number
 // Survival pays for each level you get through, more the deeper it gets (Thomas, 2026-11-06), so
 // farming the easy early levels pays least: 1 a level for 1-3, 2 for 4-6, 4 for 7-9, 6 for 10-12,
-// then 8. Getting through 10 levels (Thomas's best, dying on level 11) pays 1 + 27 = 28, about what
+// then 8. Getting through 10 levels (Thomas's best, dying on level 11) pays 27, about what
 // the same few minutes of Classic on Medium pay.
 export function levelCoins(level: number): number {
   return level <= 3 ? 1 : level <= 6 ? 2 : level <= 9 ? 4 : level <= 12 ? 6 : 8;
 }
 
-/** A Survival game's coins, ending on `level`: the coin for playing, plus every level got through. */
+/** A Survival game's coins, ending on `level`: every level got through. No coin just for playing,
+ * so dying on level 1 pays nothing and coins start once you reach level 2. */
 export function survivalCoins(level: number): number {
-  let coins = GAME_COINS;
+  let coins = 0;
   for (let l = 1; l < level; l++) coins += levelCoins(l);
   return coins;
 }

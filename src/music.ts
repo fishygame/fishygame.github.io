@@ -5,7 +5,6 @@ import funky70s from "./assets/music/funky-70s.mp3";
 import sunburntSmiles from "./assets/music/sunburnt-smiles.mp3";
 import retro8Bit from "./assets/music/retro-8-bit.mp3";
 import quirkyBlocks from "./assets/music/quirky-blocks.mp3";
-import saveAs from "./assets/music/save-as.mp3";
 import happyUkulele from "./assets/music/happy-ukulele.mp3";
 import reggaeUnited from "./assets/music/reggae-united.mp3";
 import smoothPartyFunk from "./assets/music/smooth-party-funk.mp3";
@@ -30,7 +29,6 @@ export const TRACKS: Track[] = [
   { id: "sunburnt-smiles", name: "Sunburnt Smiles", url: sunburntSmiles },
   { id: "retro-8-bit", name: "Retro 8-Bit", url: retro8Bit },
   { id: "quirky-blocks", name: "Quirky Blocks", url: quirkyBlocks },
-  { id: "save-as", name: "Save As", url: saveAs },
   { id: "happy-ukulele", name: "Happy Ukulele", url: happyUkulele },
   { id: "reggae-united", name: "Reggae United", url: reggaeUnited },
   { id: "smooth-party-funk", name: "Smooth Party Funk", url: smoothPartyFunk },
