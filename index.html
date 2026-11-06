@@ -19,6 +19,9 @@
     <div id="menu" class="panel">
       <h1>%VITE_TITLE%</h1>
       <div class="screen" data-screen="main">
+        <!-- who's playing goes first, above the game picks, so a quick tap on the top button isn't
+             mistaken for Start (Thomas's son kept doing that when it sat just above Start) -->
+        <button data-go="players" id="player-button">Who's playing?</button>
         <div class="pick" data-pick="mode" role="group" aria-label="Game mode">
           <button data-value="classic">Classic</button>
           <button data-value="speed">Speed</button>
@@ -30,8 +33,7 @@
           <button data-value="hard">Hard</button>
         </div>
         <p class="pick-help"></p>
-        <button data-go="players" id="player-button">Who's playing?</button>
-        <button data-go="start">Start Game</button>
+        <button data-go="start" id="start-button">Start Game</button>
         <button data-go="shop">Treasure Chest <span class="shop-coins"><span class="coin"></span><span class="n">0</span></span></button>
         <button data-go="instructions">Instructions</button>
         <button data-go="scores">High Scores</button>

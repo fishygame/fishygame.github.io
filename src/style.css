@@ -543,6 +543,13 @@ canvas {
   opacity: 0.9;
 }
 
+/* Start Game stands out from the other menu buttons: thicker, solid border and bigger, heavier text */
+#menu #start-button {
+  font-size: 24px;
+  font-weight: 900;
+  border: 4px solid #fff;
+}
+
 /* the main menu's "Playing as ..." */
 #menu #player-button {
   font-size: 17px;
@@ -655,6 +662,9 @@ canvas {
   }
   #menu .pick-help {
     min-height: 0;
+  }
+  #menu #start-button {
+    font-size: 21px;
   }
 }
 
