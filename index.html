@@ -32,14 +32,14 @@
         <p class="pick-help"></p>
         <button data-go="players" id="player-button">Who's playing?</button>
         <button data-go="start">Start Game</button>
-        <button data-go="shop">Shop <span class="shop-coins"><span class="coin"></span><span class="n">0</span></span></button>
+        <button data-go="shop">Treasure Chest <span class="shop-coins"><span class="coin"></span><span class="n">0</span></span></button>
         <button data-go="instructions">Instructions</button>
         <button data-go="scores">High Scores</button>
         <button data-go="sound">Sound</button>
       </div>
-      <!-- coin shop: looks, hats and trails for your fish (cosmetics only) -->
+      <!-- the coin shop, called the Treasure Chest: looks, hats and trails for your fish (cosmetics only) -->
       <div class="screen" data-screen="shop" hidden>
-        <h2>Shop</h2>
+        <h2>The Treasure Chest</h2>
         <p class="wallet-line"><span id="shop-who"></span><span class="coin"></span><b id="shop-balance">0</b> coins</p>
         <p id="shop-nobody" class="sync-help" hidden>You're playing as a Guest. Add your name on the main menu to collect coins and buy things.</p>
         <canvas id="shop-preview"></canvas>
@@ -89,7 +89,7 @@
           <li>And keep away from the crab on the sand. Its pinch is deadly&hellip; unless you're big enough to eat it.</li>
           <li>Grow until you nearly fill the screen to win.</li>
           <li>Now and then, golden <b class="gold">fish food</b> sinks from the surface. Eat it for bonus points and coins! (Not in Survival.)</li>
-          <li><b class="gold">Coins:</b> every game earns some: more the further you get, and more on harder levels (Easy pays half, Hard pays double). Spend them in the Shop on looks, hats and trails for your fish. Add your name under <i>Playing as</i> on the menu to collect them; Guests don't earn coins.</li>
+          <li><b class="gold">Coins:</b> every game earns some: more the further you get, and more on harder levels (Easy pays half, Hard pays double). Spend them in the Treasure Chest on looks, hats and trails for your fish. Add your name under <i>Playing as</i> on the menu to collect them; Guests don't earn coins.</li>
           <li><b>Survival:</b> you never grow, and every fish is bigger than you, so just stay alive! It starts calm and gets harder every level: sharks, hooks, crabs, then more of them at once, and fish with <b class="danger">red eyes</b> that double back too. Holding still earns up to 5 times the points, if you dare.</li>
           <li><b>Easy</b> has no sharks or crab, and more to eat at the start. <b>Hard</b> has more sharks (and they all double back), more hooks and more crabs.</li>
           <li id="controls-help"></li>

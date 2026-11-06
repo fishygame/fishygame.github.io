@@ -6,6 +6,7 @@ import { HOOK_TIMING, Hook } from "./hook";
 import { CRAB_TIMING, Crab } from "./crab";
 import { Bait } from "./bait";
 import { Trail } from "./trail";
+import { drawChestBack, drawChestFront } from "./chest";
 import {
   BAIT_COINS,
   COIN_RATE,
@@ -492,6 +493,7 @@ function showScreen(name: string): void {
   }
   if (name === "shop") {
     picked = null;
+    shopOpenedAt = time; // the chest swings open
     renderShop();
     void wallet.sync();
   }
@@ -765,6 +767,7 @@ const addForm = document.getElementById("add-player") as HTMLFormElement;
 const addName = document.getElementById("add-name") as HTMLInputElement;
 const addError = document.getElementById("add-error") as HTMLParagraphElement;
 let picked: string | null = null; // the item being tried on in the preview
+let shopOpenedAt = -Infinity;
 const previewFish = new Fish(0, 0, 0, 0, 46, 26);
 const previewTrail = new Trail();
 
@@ -992,12 +995,21 @@ function drawShopPreview(dt: number): void {
   const outfit = previewOutfit();
   previewFish.look = (outfit.look as Look | null) ?? "plain";
   previewFish.hat = outfit.hat as Hat | null;
-  previewFish.x = w / 2 + 20;
-  previewFish.y = h / 2 + 16 + Math.sin(time * 2) * 4;
+  // the chest: its lid swings open, then your fish rises out of it and bobs above the coins
+  const t = time - shopOpenedAt;
+  const ease = (x: number) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
+  const open = ease(t / 0.45);
+  const rise = ease((t - 0.2) / 0.5);
+  const cx = w / 2;
+  const rimY = h - 64;
+  drawChestBack(p, cx, rimY, open, time);
+  previewFish.x = cx + 14;
+  previewFish.y = rimY + 26 + (-100 + Math.sin(time * 2) * 4) * rise;
   const kind = outfit.trail as TrailKind | null;
-  previewTrail.update(dt, kind, previewFish.x, previewFish.y, 1, previewFish.r, 200, -90);
+  previewTrail.update(dt, rise > 0.9 ? kind : null, previewFish.x, previewFish.y, 1, previewFish.r, 200, -90);
   previewTrail.draw(p, kind, time);
   previewFish.draw(p, time);
+  drawChestFront(p, cx, rimY, open);
 }
 
 // ---- high scores ----
