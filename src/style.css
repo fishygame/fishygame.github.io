@@ -136,6 +136,7 @@ canvas {
 
 #menu ol li .end.won {
   font-weight: bold;
+  color: #ffd166; /* gold, so a win stands out (Thomas) */
 }
 
 #menu ol li .time {

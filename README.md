@@ -57,16 +57,29 @@ to the fishygame org.
   you and the screen fills with smaller fish: a feeding frenzy.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.
-- In Classic and Speed, a single gold coin drops in from the surface every 13-20 s (the first
-  5-8 s in) and flutters down like a real coin in water, tumbling end over end and drifting side to
-  side, then rocks to a stop on the sand, rests there 5 s (flashing, faster and faster, for the last 1.6 s) and vanishes. Eat it for 100 points, shown
-  as a gold "+100"; in Speed it also counts as a bite for the combo. It never hangs from a line, so
-  it can't be mistaken for the hook's worm. Not in Survival. (It replaced a clump of fish food worth
-  300 points and 6 coins every 40-60 s, so a game pays about the same.)
+- Sinking coins: in Classic and Speed, up to 6 gold coins a game drop in from the surface, paid out
+  by growing, not by time: the k-th falls once the growth bar passes k/7 (at least 5 s apart), so
+  hanging around small earns nothing more. Each flutters down like a real coin in water, tumbling end
+  over end and drifting side to side, then rocks to a stop on the sand, rests there 5 s (flashing,
+  faster and faster, for the last 1.6 s) and vanishes. Eat one for 100 points ("+100") and 2 coins;
+  in Speed it also counts as a bite for the combo. As a bonus, the treasure chest on the sand bursts
+  open twice a game (at half and 80% of the growth bar; in Survival on reaching levels 5 and 10),
+  flinging 3 coins up that sink the same way; you may not catch them all. In Survival they pay coins
+  only, no points (its score is time alive). A coin never hangs from a line, so it can't be mistaken
+  for the hook's worm. (They replaced a clump of golden fish food.)
 - Coins and the shop (called the Treasure Chest in the game): every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
-  a win and 2 per sinking coin caught (Survival: nothing for playing, then 1 a level got through for levels 1-3, 2
-  for 4-6, 4 for 7-9, 6 for 10-12, then 8; the level banner shows each level's coins), times the difficulty (Easy x0.5,
-  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. In play, a named player sees the coins the game has paid so far ("+23", popping as it goes up) next to the score, or under the growth bar on a narrow screen. The High Scores
+  a win and 2 per coin caught (Survival: nothing for playing, then 1 a level got through for levels 1-3, 2
+  for 4-6, 4 for 7-9, 6 for 10-12, then 8, at most 40 for levels in one game, plus 2 per chest coin caught; the level banner shows each level's coins), times the difficulty (Easy x0.5,
+  Medium x1, Hard x2; Survival x1).
+- **The most one game can pay** (so we know how long the shop takes): Classic/Speed 1 + 10 + 6 (win)
+  + 12 (6 sinking coins) + 12 (6 chest coins) = **41 on Medium, 82 on Hard, 21 on Easy**; Survival
+  40 + 12 = **52**. The shop is 6,550 coins in all. From the live Speed boards, a Hard win takes a
+  strong player 8-9 minutes and an Easy win about 3, and Survival runs last 1-3 minutes. So the very
+  best rate, winning Hard every time and catching every coin, is about 10 coins a minute: **about 11
+  hours of perfect play** to buy everything (more than 80 straight Hard wins). Easy wins top out
+  around 6 a minute and long Survival runs around 12 a minute for the first 4 minutes, then only the
+  chest pays. A typical kid on Medium, dying partway in 2-3 minutes, earns 8-15 a game: the first
+  75-coin hat in about 6-9 games, everything in roughly 25-35 hours. The main menu shows each difficulty's rate. In play, a named player sees the coins the game has paid so far ("+23", popping as it goes up) next to the score, or under the growth bar on a narrow screen. The High Scores
   screen shows each player's fish in their outfit next to their name (from their wallet; a plain
   fish if they have none); point at (or tap) one to see it big. The Treasure Chest keeps your coins,
   your fish and the Buy button in view while the items scroll, beside them on a wide screen. The Shop sells

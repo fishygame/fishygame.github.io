@@ -69,6 +69,7 @@ export class Scenery {
   private chest = { x: 0, y: 0, s: 1 };
   private chestBubbles: Bubble[] = [];
   private chestTimer = 0;
+  private chestPopAt = -Infinity; // when the chest last burst open to throw out coins
   private whale: Whale | null = null;
   private whaleTimer = between(WHALE_FIRST);
   private turtles: Turtle[] = [];
@@ -110,6 +111,38 @@ export class Scenery {
     const ctx = this.floor.getContext("2d") as CanvasRenderingContext2D;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawFloor(ctx, rand, s);
+  }
+
+  /** Where coins come out of the treasure chest: the middle of its mouth. */
+  chestMouth(): { x: number; y: number } {
+    return { x: this.chest.x, y: this.chest.y - 34 * this.chest.s };
+  }
+
+  /** Throw the chest's lid open (it falls shut again after a moment), with a gush of bubbles. */
+  popChest(time: number): void {
+    this.chestPopAt = time;
+    const { x, y, s } = this.chest;
+    for (let i = 0; i < 14; i++) {
+      this.chestBubbles.push({
+        x: x + (Math.random() - 0.5) * 50 * s,
+        y: y - 40 * s - Math.random() * 30,
+        r: 2 + Math.random() * 5,
+        speed: 70 + Math.random() * 90,
+      });
+    }
+  }
+
+  /** The lid's tilt: propped a little open, flung wide when the chest bursts, then dropping back
+   * with a small bounce. */
+  private lidAngle(time: number): number {
+    const REST = -0.25;
+    const OPEN = -1.7;
+    const t = time - this.chestPopAt;
+    if (t < 0 || t > 1.5) return REST;
+    if (t < 0.12) return REST + (OPEN - REST) * Math.sin((t / 0.12) * (Math.PI / 2));
+    if (t < 0.8) return OPEN;
+    const u = (t - 0.8) / 0.7; // closing, with a bounce at the bottom
+    return REST + (OPEN - REST) * Math.abs(Math.cos(u * Math.PI * 1.5)) * (1 - u) ** 2;
   }
 
   update(dt: number): void {
@@ -208,6 +241,8 @@ export class Scenery {
       this.weed(ctx, w, time, "rgba(40, 140, 120, 0.35)", null);
     }
     ctx.drawImage(this.floor, 0, 0, this.W, this.H);
+    // the chest is drawn live, not on the floor, so its lid can fly open
+    this.treasureChest(ctx, this.chest.x, this.chest.y, this.chest.s, time);
 
     ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
     ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -430,7 +465,6 @@ export class Scenery {
       const x = rand() * W;
       this.rock(ctx, x, this.sandTop(x) + 14, (10 + rand() * 14) * s, rand);
     }
-    this.treasureChest(ctx, this.chest.x, this.chest.y, s);
     const starX = W * 0.58;
     this.starfish(ctx, starX, this.sandTop(starX) + 30, 16 * s);
     const shellX = W * 0.12;
@@ -515,24 +549,37 @@ export class Scenery {
     ctx.fill();
   }
 
-  private treasureChest(ctx: CanvasRenderingContext2D, x: number, base: number, s: number): void {
+  private treasureChest(ctx: CanvasRenderingContext2D, x: number, base: number, s: number, time: number): void {
     const w = 70 * s;
     const h = 34 * s;
     const lidH = 20 * s;
     const left = x - w / 2;
     const top = base - h;
+    const lid = this.lidAngle(time);
 
     // box
     ctx.fillStyle = "#7a4a22";
     ctx.fillRect(left, top, w, h);
-    // lid, propped slightly open with gold peeking out
+    // gold peeking out, glowing while the lid's flung open
+    const open = (lid - -0.25) / (-1.7 - -0.25); // 0 shut as usual, 1 wide open
+    if (open > 0.05) {
+      ctx.save();
+      const glow = ctx.createRadialGradient(x, top, 2, x, top, 70 * s);
+      glow.addColorStop(0, `rgba(255, 225, 110, ${0.7 * open})`);
+      glow.addColorStop(1, "rgba(255, 225, 110, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, top, 70 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.fillStyle = "#f2c531";
     ctx.beginPath();
-    ctx.ellipse(x, top, w * 0.45, 5 * s, 0, Math.PI, 0);
+    ctx.ellipse(x, top, w * 0.45, (5 + 4 * open) * s, 0, Math.PI, 0);
     ctx.fill();
     ctx.save();
     ctx.translate(left, top);
-    ctx.rotate(-0.25);
+    ctx.rotate(lid);
     ctx.fillStyle = "#8c5629";
     ctx.beginPath();
     ctx.moveTo(0, 0);

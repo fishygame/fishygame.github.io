@@ -75,12 +75,16 @@ export function levelCoins(level: number): number {
   return level <= 3 ? 1 : level <= 6 ? 2 : level <= 9 ? 4 : level <= 12 ? 6 : 8;
 }
 
-/** A Survival game's coins, ending on `level`: every level got through. No coin just for playing,
- * so dying on level 1 pays nothing and coins start once you reach level 2. */
+// The most Survival's levels pay in one game, reached getting through level 12 (about 4 minutes), so a
+// marathon run can't buy the shop: past that only the chest's bonus coins pay (Thomas, 2026-11-06).
+export const SURVIVAL_MAX = 40;
+
+/** A Survival game's coins for its levels, ending on `level`: every level got through, up to
+ * SURVIVAL_MAX. No coin just for playing, so dying on level 1 pays nothing. */
 export function survivalCoins(level: number): number {
   let coins = 0;
   for (let l = 1; l < level; l++) coins += levelCoins(l);
-  return coins;
+  return Math.min(SURVIVAL_MAX, coins);
 }
 
 export type Equipped = Partial<Record<Slot, string>>;

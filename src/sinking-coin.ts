@@ -1,8 +1,9 @@
-// Sinking coins (Thomas, 2026-11-06): now and then a single gold coin drops in from the surface and
-// flutters down to the sand like a real coin in water, tumbling end over end and drifting side to
-// side, worth bonus points and coins if you eat it on the way. (It replaced a clump of golden fish
-// food, which paid the same over a game but came a third as often.) It never hangs from a line, so
-// it can't be mistaken for the hook's worm: shiny and loose is treasure, a worm on a line is death.
+// Sinking coins (Thomas, 2026-11-06): as you grow, a single gold coin now and then drops in from the
+// surface and flutters down to the sand like a real coin in water, tumbling end over end and drifting
+// side to side, worth bonus points and coins if you eat it on the way. The treasure chest on the sand
+// also bursts open now and then, flinging a few up that then sink the same way. (They replaced a
+// clump of golden fish food.) A coin never hangs from a line, so it can't be mistaken for the hook's
+// worm: shiny and loose is treasure, a worm on a line is death.
 
 const SINK_SPEED = 48; // px/s on average; faster edge-on, slower face-on, like a coin in water
 const DRIFT = 16; // px of side-to-side drift as it sinks
@@ -13,6 +14,7 @@ const RADIUS = 13; // for eating it; a little generous, so a near miss still cou
 const R = 10; // the coin as drawn
 const THICK = 2.6; // its edge, seen when it's side-on
 const SETTLE = 0.9; // seconds it rocks on the sand before lying still
+const WATER_PULL = 520; // px/s² slowing a coin flung up out of the chest, then pulling it back down
 
 export class SinkingCoin {
   x: number;
@@ -25,16 +27,35 @@ export class SinkingCoin {
   private flip = Math.random() * Math.PI * 2; // turn about its upright axis; face-on at 0 and PI
   private spin = (4.5 + Math.random() * 2.5) * (Math.random() < 0.5 ? -1 : 1); // radians/s
   private landFlip = 0;
+  private fling: { vx: number; vy: number } | null = null;
 
-  constructor(x: number, born: number) {
+  /** Dropped in from the surface at x; or, given a starting point and a fling, thrown from there. */
+  constructor(x: number, born: number, from?: { y: number; vx: number; vy: number }) {
     this.x0 = this.x = x;
-    this.y = -15;
+    this.y = from ? from.y : -15;
     this.born = born;
+    if (from) this.fling = { vx: from.vx, vy: from.vy };
   }
 
   /** Flutter down, settle on the sand, flash, then vanish. Returns false once it's gone. */
   update(dt: number, time: number, sandTop: number): boolean {
     if (this.eaten) return false;
+    const f = this.fling;
+    if (f) {
+      // flung out of the chest: it rises, the water slows it, and once it's sinking it flutters
+      f.vy += WATER_PULL * dt;
+      f.vx *= Math.exp(-1.5 * dt);
+      this.x += f.vx * dt;
+      this.y = Math.max(20, this.y + f.vy * dt);
+      this.flip += this.spin * 1.8 * dt;
+      if (f.vy >= SINK_SPEED * 0.7) {
+        this.fling = null;
+        // carry on drifting from right here, without a jump
+        const t = time - this.born;
+        this.x0 = this.x - (Math.sin(t * 1.3 + this.seed) * DRIFT + Math.sin(t * 3.1 + this.seed * 2) * 3);
+      }
+      return true;
+    }
     if (this.landedAt === null) {
       // face-on it catches the water and slows; edge-on it slips down faster
       const edgeOn = Math.abs(Math.sin(this.flip));

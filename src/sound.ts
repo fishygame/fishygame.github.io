@@ -335,6 +335,26 @@ export class Sound {
     });
   }
 
+  /** The treasure chest bursting open: a quick run of bright notes tumbling up, like spilling coins. */
+  treasure(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [784, 988, 1175, 1568, 1976, 2349].forEach((freq, i) => {
+      const at = i * 0.055;
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(0.25, t + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + 0.3);
+      osc.connect(g).connect(this.master);
+      osc.start(t + at);
+      osc.stop(t + at + 0.35);
+    });
+  }
+
   private noiseBurst(
     dest: AudioNode,
     t: number,

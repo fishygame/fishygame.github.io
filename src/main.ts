@@ -22,7 +22,6 @@ import {
   WIN_COINS,
   Wallet,
   isGuestName,
-  levelCoins,
   survivalCoins,
 } from "./shop";
 import {
@@ -111,12 +110,17 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
-// sinking coins (not in Survival): a single gold coin fluttering down from the surface now and then.
-// They replaced a clump of fish food worth 300 points that came every 40-60 s; a coin comes three
-// times as often for a third of the points, so a game pays about the same (Thomas, 2026-11-06).
-const COIN_POINTS = 100; // in Speed it also keeps the combo going
-const COIN_FIRST = [5, 8]; // seconds into a game before the first one
-const COIN_EVERY = [13, 20]; // seconds between the rest
+// Sinking coins (Thomas, 2026-11-06). A game has a fixed most it can pay, and growing pays it out,
+// not time: in Classic/Speed up to COIN_DROPS coins fall from the surface, the k-th once the growth
+// bar passes k/(COIN_DROPS + 1), so hanging around small earns nothing more. On top of that, as a
+// bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
+// Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
+const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
+const COIN_DROPS = 6;
+const COIN_GAP = 5; // seconds at least between two dropped coins, so a growth spurt doesn't rain them
+const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
+const CHEST_LEVELS = [5, 10];
+const CHEST_COINS = 3;
 const POPUP_TIME = 1.2; // how long the "+100" floats up
 // Fish colors run from green through blue to pink, well clear of the player's orange (hue 26).
 const FISH_HUES = [90, 330];
@@ -346,7 +350,9 @@ let levelUpAt = -Infinity;
 let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
 let sinking: SinkingCoin[] = [];
-let coinTimer = 0;
+let coinsDropped = 0; // from the surface this game
+let lastDropAt = -Infinity;
+let chestBursts = 0; // this game
 let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
 let coinsCaught = 0;
 let coinsEarned = 0; // what the game that just ended paid, for the end screen
@@ -403,7 +409,9 @@ function reset(): void {
   timeBonus = 0;
   sinking = [];
   popups = [];
-  coinTimer = between(COIN_FIRST);
+  coinsDropped = 0;
+  lastDropAt = -Infinity;
+  chestBursts = 0;
   myRanks = { week: -1, all: -1, players: -1 };
   syncUI();
 }
@@ -443,7 +451,7 @@ function endGame(next: State): void {
 /** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew,
  * winning and the sinking coins caught, times the difficulty's rate; in Survival, for each level got through. */
 function gameCoins(): number {
-  if (mode === "survival") return survivalCoins(level);
+  if (mode === "survival") return survivalCoins(level) + coinsCaught * COIN_VALUE;
   const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + coinsCaught * COIN_VALUE;
   return Math.round(raw * COIN_RATE[difficulty]);
 }
@@ -1528,7 +1536,7 @@ function update(dt: number): void {
       return;
     }
   }
-  if (mode !== "survival") sinkingCoins(dt);
+  sinkingCoins();
 
   for (let i = fish.length - 1; i >= 0; i--) {
     const f = fish[i];
@@ -1559,17 +1567,24 @@ function update(dt: number): void {
   }
 }
 
-function between([lo, hi]: number[]): number {
-  return lo + Math.random() * (hi - lo);
-}
-
-/** Classic and Speed: drop a gold coin now and then, and pay a bonus for eating it. */
-function sinkingCoins(dt: number): void {
-  coinTimer -= dt;
-  if (coinTimer <= 0) {
+/** Drop coins as you grow (Classic/Speed), burst the chest when it's time, and pay for any eaten. */
+function sinkingCoins(): void {
+  const survival = mode === "survival";
+  // Classic/Speed: the next coin falls once you've grown enough for it
+  if (
+    !survival &&
+    coinsDropped < COIN_DROPS &&
+    progress() >= (coinsDropped + 1) / (COIN_DROPS + 1) &&
+    time - lastDropAt >= COIN_GAP
+  ) {
     sinking.push(new SinkingCoin(W * (0.1 + 0.8 * Math.random()), time));
-    coinTimer = between(COIN_EVERY);
+    coinsDropped++;
+    lastDropAt = time;
   }
+  // the chest bursts open as you get far enough
+  const next = survival ? level >= CHEST_LEVELS[chestBursts] : progress() >= CHEST_AT[chestBursts];
+  if (chestBursts < CHEST_AT.length && next) burstChest();
+
   for (const c of sinking) {
     const hb = c.hitbox(time);
     if (!hb || !overlaps(hb)) continue;
@@ -1579,11 +1594,32 @@ function sinkingCoins(dt: number): void {
       combo = Math.min(COMBO_MAX, combo + 1);
       lastBite = time;
     }
-    score += COIN_POINTS;
+    if (!survival) score += COIN_POINTS; // Survival's score is time alive, so they pay coins only
     coinsCaught++;
-    popups.push({ x: c.x, y: c.y, text: `+${COIN_POINTS}`, coins: wallet.name ? caughtCoinValue() : 0, at: time }); // Guests earn no coins
+    const text = survival ? "" : `+${COIN_POINTS}`;
+    popups.push({ x: c.x, y: c.y, text, coins: wallet.name ? caughtCoinValue() : 0, at: time }); // Guests earn no coins
     sound.bonus();
   }
+}
+
+/** The treasure chest flings its lid open and throws a few coins up into the water. */
+function burstChest(): void {
+  chestBursts++;
+  scenery.popChest(time);
+  const mouth = scenery.chestMouth();
+  for (let i = 0; i < CHEST_COINS; i++) {
+    const spread = i - (CHEST_COINS - 1) / 2; // -1, 0, 1: left, up, right
+    sinking.push(
+      new SinkingCoin(mouth.x, time, {
+        y: mouth.y - 4,
+        // wide enough to land clear of the chest; the middle one leans to a side too
+        vx: (spread || (Math.random() < 0.5 ? -0.6 : 0.6)) * 130 + (Math.random() - 0.5) * 30,
+        vy: -(280 + Math.random() * 60),
+      }),
+    );
+  }
+  popups.push({ x: mouth.x, y: mouth.y - 30, text: "Treasure!", coins: 0, at: time });
+  sound.treasure();
 }
 
 /** The gold "+100" that floats up and fades where you ate a sinking coin. */
@@ -1866,7 +1902,8 @@ function drawLevelBanner(): void {
   if (level > 1 && wallet.name) {
     ctx.font = "bold 20px system-ui, sans-serif";
     ctx.fillStyle = "#fff1a8";
-    ctx.fillText(coinWord(levelCoins(level - 1)), W / 2, H * 0.3 + 78);
+    const paid = survivalCoins(level) - survivalCoins(level - 1); // nothing once the game's most is reached
+    if (paid) ctx.fillText(coinWord(paid), W / 2, H * 0.3 + 78);
   }
   ctx.restore();
 }
@@ -2091,10 +2128,18 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
     if (speed) ctx.fillText(boardTime(entry), timeX, rowY);
     if (entry.end) {
       ctx.textAlign = "left";
-      if (entry.end === "won") ctx.font = `bold ${size - 4}px system-ui, sans-serif`;
+      const won = entry.end === "won";
+      ctx.save();
+      if (won) {
+        // bold gold, full strength, so a win stands out (Thomas)
+        ctx.font = `bold ${size - 4}px system-ui, sans-serif`;
+        ctx.fillStyle = "#ffd166";
+        ctx.globalAlpha = 1;
+      }
       // squeezed if it would run into the time or score (a narrow board)
       const room = (speed ? timeX - 40 : left + half * 2 - 100) - (left + 166);
       ctx.fillText(END_LABEL[entry.end], left + 160, rowY, Math.min(96, room));
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   });
