@@ -1,5 +1,5 @@
 import "./style.css";
-import { Fish } from "./fish";
+import { type Capsule, Fish } from "./fish";
 import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { HOOK_TIMING, Hook } from "./hook";
@@ -84,6 +84,7 @@ const SURVIVAL_POINTS = 10; // per second
 const STILL_STEP = 1;
 const STILL_MAX = 5;
 const STILL_SPEED = 15; // px/s; slower than this counts as still
+const CHEAT = import.meta.env.DEV && new URLSearchParams(location.search).has("cheat"); // see the tag below
 const NERVOUS_AFTER = 0.8; // s held still, in any mode, before the hero's eyes start darting about
 const LEVEL_BANNER = 2.5; // seconds the "Level 4" banner shows
 const MAX_HOOKS = 4; // at once, on Survival's last levels; the other modes use one
@@ -443,9 +444,10 @@ function endGame(next: State): void {
     timeBonus = Math.max(0, Math.round(SPEED_PAR - elapsed())) * TIME_BONUS;
     score += timeBonus;
   }
-  coinsEarned = gameCoins();
-  wallet.award(coinsEarned);
+  coinsEarned = CHEAT ? 0 : gameCoins();
+  if (!CHEAT) wallet.award(coinsEarned);
   syncUI();
+  if (CHEAT) return; // no high scores from cheat mode
   // get the latest board, and ask for a name if this score makes it
   const ended = endedAt;
   loadBoard()
@@ -491,8 +493,15 @@ const menu = document.getElementById("menu") as HTMLDivElement;
 const menuScores = document.getElementById("menu-scores") as HTMLOListElement;
 const toMenu = document.getElementById("to-menu") as HTMLButtonElement;
 document.getElementById("scores-title")!.textContent = BOARD_TITLE;
+// Cheat mode, for trying out later levels: localhost?cheat. Never in a build, so it can't ship.
+if (CHEAT) {
+  const tag = document.createElement("div");
+  tag.id = "test-copy";
+  tag.textContent = "Cheat mode: any fish (not sharks) is food. Nothing saved.";
+  document.body.append(tag);
+}
 // a copy pointed at a local Lambda (for trying things out) says so, so nobody takes its scores for real
-if (import.meta.env.VITE_SCORE_API) {
+if (import.meta.env.VITE_SCORE_API && !CHEAT) {
   const tag = document.createElement("div");
   tag.id = "test-copy";
   tag.textContent = "Test copy: scores and coins here aren't real";
@@ -1395,6 +1404,7 @@ function inFrenzy(): boolean {
 }
 
 function dangerous(f: Fish): boolean {
+  if (CHEAT && f.kind !== "shark") return false;
   // sharks can't be eaten, until the frenzy, when you're too big for anything to hurt you; in
   // Survival nothing can be eaten
   return surviving() || f.r >= player.r || (f.kind === "shark" && !inFrenzy());
@@ -1525,7 +1535,7 @@ function update(dt: number): void {
   // fishing hooks: deadly, unless you're big enough to bite right through the line
   for (const h of hooks) {
     const bait = h.bait(time);
-    if (!bait || !overlaps({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius })) continue;
+    if (!bait || !overlaps(circle(bait))) continue;
     if (inFrenzy()) {
       h.snap();
       sound.eat(0.7);
@@ -1566,7 +1576,10 @@ function update(dt: number): void {
     }
 
     if (touching(f)) {
-      if (!dangerous(f)) {
+      if (!dangerous(f) && surviving()) {
+        // cheat mode in Survival: it just goes, no points or growth (Survival's levels go by time)
+        fish.splice(i, 1);
+      } else if (!dangerous(f)) {
         // bigger meals and a bigger you both make for a deeper gulp (or burp)
         sound.eat(Math.min(1, 0.5 * (f.r / player.r) + 0.5 * progress()));
         score += bitePoints(Math.max(1, Math.round(POINTS * (f.r / player.r) ** 3)));
@@ -1759,7 +1772,7 @@ function playerMaxSpeed(): number {
 
 /** Move a fish along. Returns false once it has swum off the screen for good. */
 function swim(f: Fish, dt: number): boolean {
-  f.update(dt);
+  f.update(dt, ...swimRange(f));
   // tails reach about 2r behind, so past that it's out of sight (and out of the cover budget)
   if (f.x < -f.r * 2.2 || f.x > W + f.r * 2.2) return false;
   // drifting fish bounce off the top and bottom instead of wandering out of reach
@@ -1773,26 +1786,37 @@ function swimRange(f: Fish): [number, number] {
   return [f.r * 0.5, H - f.r * 0.4];
 }
 
-interface Capsule {
-  x0: number;
-  x1: number;
-  y: number;
-  radius: number;
+/** A round thing (bait, a coin) as a capsule with both ends together. */
+function circle(c: { x: number; y: number; radius: number }): Capsule {
+  return { x0: c.x, y0: c.y, x1: c.x, y1: c.y, radius: c.radius };
 }
 
 function touching(f: Fish): boolean {
   return overlaps(f.hitbox());
 }
 
-/** Whether the player's body overlaps a horizontal capsule (a circle, if x0 === x1). */
+/** Whether the player's body overlaps a capsule. */
 function overlaps(a: Capsule): boolean {
   return capsulesTouch(a, player.hitbox());
 }
 
 function capsulesTouch(a: Capsule, b: Capsule): boolean {
-  // both are horizontal capsules, so the distance between them is easy to get
-  const gapX = Math.max(0, a.x0 - b.x1, b.x0 - a.x1);
-  return Math.hypot(gapX, a.y - b.y) < (a.radius + b.radius) * HIT_FACTOR;
+  return segmentGap(a, b) < (a.radius + b.radius) * HIT_FACTOR;
+}
+
+/** Shortest distance between two capsules' center lines: 0 if they cross, else end to segment. */
+function segmentGap(a: Capsule, b: Capsule): number {
+  const side = (s: Capsule, x: number, y: number) => (s.x1 - s.x0) * (y - s.y0) - (s.y1 - s.y0) * (x - s.x0);
+  if (side(b, a.x0, a.y0) * side(b, a.x1, a.y1) < 0 && side(a, b.x0, b.y0) * side(a, b.x1, b.y1) < 0) return 0;
+  return Math.min(pointGap(a.x0, a.y0, b), pointGap(a.x1, a.y1, b), pointGap(b.x0, b.y0, a), pointGap(b.x1, b.y1, a));
+}
+
+function pointGap(x: number, y: number, s: Capsule): number {
+  const dx = s.x1 - s.x0;
+  const dy = s.y1 - s.y0;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((x - s.x0) * dx + (y - s.y0) * dy) / len2)) : 0;
+  return Math.hypot(x - (s.x0 + t * dx), y - (s.y0 + t * dy));
 }
 
 /** Once the hook's waited long enough, the first fish to swim into the bait gets reeled in. */
@@ -1801,7 +1825,7 @@ function hookAFish(): void {
     const bait = h.bait(time);
     if (!bait) continue;
     const i = fish.findIndex(
-      (f) => h.wants(f) && capsulesTouch({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius }, f.hitbox()),
+      (f) => h.wants(f) && capsulesTouch(circle(bait), f.hitbox()),
     );
     if (i === -1) continue;
     h.catchFish(fish[i]);

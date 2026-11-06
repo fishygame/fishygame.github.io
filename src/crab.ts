@@ -3,6 +3,7 @@
 // to eat it. It keeps the bottom of the screen from being a safe place to hide, like the hook
 // does for the top.
 
+import type { Capsule } from "./fish";
 import type { Timing } from "./settings";
 
 /** On Medium; settings.ts has the others. Gap is from one leaving to the next arriving. */
@@ -101,12 +102,12 @@ export class Crab {
     return this.timing ? between(this.timing.gap) : Infinity;
   }
 
-  /** The body and claws as a horizontal capsule, or null when there's no crab about. */
-  hitbox(): { x0: number; x1: number; y: number; radius: number } | null {
+  /** The body and claws as a level capsule, or null when there's no crab about. */
+  hitbox(): Capsule | null {
     if (this.phase === "idle") return null;
     // low and wide enough to reach the bottom of the screen; the claw tips don't count
     const y = this.H - FEET - 14 * SCALE;
-    return { x0: this.x - 24 * SCALE, x1: this.x + 24 * SCALE, y, radius: 20 * SCALE };
+    return { x0: this.x - 24 * SCALE, y0: y, x1: this.x + 24 * SCALE, y1: y, radius: 20 * SCALE };
   }
 
   /** Side-on cartoon crab: round shell, eyes on stalks, legs, and two big snapping claws. */

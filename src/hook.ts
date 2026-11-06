@@ -137,6 +137,7 @@ export class Hook {
 
   /** Hook some other fish. It belongs to the hook now: the caller should drop it from play. */
   catchFish(f: Fish): void {
+    f.settle();
     this.catch = f;
     this.reelIn();
   }

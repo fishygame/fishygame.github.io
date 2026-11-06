@@ -4,6 +4,7 @@
 // also bursts open now and then, flinging a few up that then sink the same way. (They replaced a
 // clump of golden fish food.) A coin never hangs from a line, so it can't be mistaken for the hook's
 // worm: shiny and loose is treasure, a worm on a line is death.
+import type { Capsule } from "./fish";
 
 const SINK_SPEED = 80; // px/s on average (48 felt like forever on a tall screen); faster edge-on, slower face-on, like a coin in water
 const DRIFT = 16; // px of side-to-side drift as it sinks
@@ -74,9 +75,9 @@ export class SinkingCoin {
   }
 
   /** A circle you can bite, flashing or not, until it's gone. */
-  hitbox(time: number): { x0: number; x1: number; y: number; radius: number } | null {
+  hitbox(time: number): Capsule | null {
     if (this.landedAt !== null && time - this.landedAt >= REST) return null;
-    return { x0: this.x, x1: this.x, y: this.y, radius: RADIUS };
+    return { x0: this.x, y0: this.y, x1: this.x, y1: this.y, radius: RADIUS };
   }
 
   /** Its turn right now: tumbling while it sinks, then rocking to a stop face-on on the sand. */

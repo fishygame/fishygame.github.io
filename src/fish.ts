@@ -3,6 +3,15 @@ import type { Hat, Look } from "./shop";
 
 export type Kind = "fish" | "shark";
 
+/** A line segment with a radius: what collisions are checked with. A circle when both ends meet. */
+export interface Capsule {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  radius: number;
+}
+
 // How each shop look shifts the hero's colors: a fixed hue (or the fish's own), and saturation and
 // lightness scaled and nudged. Clownfish, Spotted and Rainbow keep the orange and add a pattern.
 const LOOK_TONE: Record<Look, { h?: number; s: number; l: number; dl: number }> = {
@@ -38,6 +47,7 @@ const SPOTS = [
 ];
 
 const SHARK_FIN = "#56687a";
+const SWING_TIME = 0.32; // s for a darter to swing round toward you and face the other way
 
 export class Fish {
   x: number;
@@ -51,12 +61,20 @@ export class Fish {
   skeleton = false; // what's left of the player after getting eaten
   flip = 0; // 0 upright .. 1 belly-up; in between it's mid-roll
   angle = 0; // tilt in radians, for hanging off a hook or leaning into a turn
-  darter = false; // now and then cuts back in a quick Z before carrying on (sharks, and fish in Survival)
-  private dart: "cruise" | "back" = "cruise";
-  private dartTimer = 2 + Math.random() * 3; // cruise: until the next dart; back: until turning forward again
+  darter = false; // now and then swings round and cuts back before carrying on (sharks, and fish in Survival)
+  // cruise → swing round (turn) → cut back on a slant (back) → swing round again (return) → cruise
+  private dart: "cruise" | "turn" | "back" | "return" = "cruise";
+  private dartTimer = 2 + Math.random() * 3; // cruise: until the next dart; back: until swinging forward again
   private cruiseVx = 0;
   private cruiseVy = 0;
   private surge = 0; // extra forward speed coming out of a dart, fading out
+  // Mid-swing: how far round (0..1), and the speed and tilt it eases between. It turns toward you,
+  // like a real fish turning in the water seen side-on: the body narrows to head-on and widens
+  // again facing the other way, tilting onto the slant as it goes.
+  private swing = 0;
+  private swingFrom = { vx: 0, vy: 0, angle: 0 };
+  private swingTo = { vx: 0, vy: 0, angle: 0 };
+  private yaw = 1; // side-on width: 1 facing `facing`, 0 head-on, -1 facing the other way
   // The hero, holding still, glances about nervously (Thomas, 2026-11-05: "subtly"). Where the pupil
   // sits, in eye widths from the eye's middle; straight ahead is (0.2, 0).
   nervous = false;
@@ -84,18 +102,26 @@ export class Fish {
   }
 
   /**
-   * The body as a horizontal capsule (a line segment with a radius) for collisions, fitted to
-   * the drawn body. Fins and tail don't count.
+   * The body as a capsule for collisions, fitted to the drawn body and tilted and turned with it,
+   * so a darting shark can't bite with empty water. Fins and tail don't count.
    */
-  hitbox(): { x0: number; x1: number; y: number; radius: number } {
+  hitbox(): Capsule {
     const [back, front, radius] = this.kind === "shark" ? [0.84, 1.14, 0.36] : [0.55, 0.7, 0.5];
-    const a = this.x - back * this.r * this.facing;
-    const b = this.x + front * this.r * this.facing;
-    return { x0: Math.min(a, b), x1: Math.max(a, b), y: this.y, radius: radius * this.r };
+    // the nose's way, one r long, shorter as it swings round head-on to you
+    const ax = Math.cos(this.angle) * this.facing * this.yaw * this.r;
+    const ay = Math.sin(this.angle) * this.facing * this.yaw * this.r;
+    return {
+      x0: this.x - back * ax,
+      y0: this.y - back * ay,
+      x1: this.x + front * ax,
+      y1: this.y + front * ay,
+      radius: radius * this.r,
+    };
   }
 
-  update(dt: number): void {
-    if (this.darter) this.darting(dt);
+  /** `top`/`bottom`: how high and low it can swim, so a dart slants toward open water. */
+  update(dt: number, top = -Infinity, bottom = Infinity): void {
+    if (this.darter) this.darting(dt, top, bottom);
     this.glance(dt);
     if (this.hat === "propeller") this.spin += dt * (4 + Math.hypot(this.vx, this.vy) / 18);
     this.x += this.vx * (1 + this.surge) * dt;
@@ -131,31 +157,80 @@ export class Fish {
   }
 
   /**
-   * A dart is a Z: turn around and cut back diagonally up or down, then turn around again and
-   * shoot off the original way with a burst of speed. In between, it cruises as normal.
+   * A dart: swing round toward the viewer and cut back on a slant up or down, then swing round
+   * again and shoot off the original way with a burst of speed. In between, it cruises as normal.
+   * (It was a hard Z, flipping around on the spot; Thomas, 2026-11-06, wanted it to turn smoothly.)
    */
-  private darting(dt: number): void {
+  private darting(dt: number, top: number, bottom: number): void {
+    this.surge *= Math.exp(-2.5 * dt);
+    if (this.dart === "turn" || this.dart === "return") {
+      this.swinging(dt);
+      return;
+    }
     this.dartTimer -= dt;
     if (this.dart === "cruise" && this.dartTimer <= 0) {
       this.cruiseVx = this.vx;
       this.cruiseVy = this.vy;
-      this.dart = "back";
-      this.dartTimer = 0.45 + Math.random() * 0.25;
-      this.vx = -this.cruiseVx * 0.9;
-      this.vy = (Math.random() < 0.5 ? -1 : 1) * (150 + Math.random() * 60);
-      this.facing = this.vx > 0 ? 1 : -1;
+      // the slant back goes up or down, toward open water when an edge is near
+      const room = 160 + this.r;
+      const down = this.y - top < room ? true : bottom - this.y < room ? false : Math.random() < 0.5;
+      // a shallow slant, 20-32 degrees whatever its speed (a fixed 150-210 px/s down was 45-80 degrees,
+      // fine while the body barely tilted, far too steep once it leaned the whole way; Thomas)
+      const backVx = -this.cruiseVx * 1.5; // lunges back faster than it cruises (was 0.9x; Thomas's wife: too easy and slow)
+      const slant = (20 + Math.random() * 12) * (Math.PI / 180);
+      this.startSwing("turn", backVx, (down ? 1 : -1) * Math.abs(backVx) * Math.tan(slant));
     } else if (this.dart === "back" && this.dartTimer <= 0) {
+      this.startSwing("return", this.cruiseVx, this.cruiseVy);
+    }
+    // lean along the slant on the way back; level when cruising
+    const lean = this.dart === "back" ? Math.atan2(this.vy * this.facing, this.vx * this.facing) : 0;
+    this.angle += (lean - this.angle) * Math.min(1, dt * 10);
+  }
+
+  /** Start swinging round to swim at (vx, vy), tilted along it, or level if it's heading back to cruise. */
+  private startSwing(phase: "turn" | "return", vx: number, vy: number): void {
+    this.dart = phase;
+    this.swing = 0;
+    const facing = -this.facing; // where it'll face once round
+    this.swingFrom = { vx: this.vx, vy: this.vy, angle: this.angle };
+    this.swingTo = { vx, vy, angle: phase === "turn" ? Math.atan2(vy * facing, vx * facing) : 0 };
+  }
+
+  /**
+   * Turn a bit further round. Speed and tilt ease from start to end; the width goes from side-on,
+   * through head-on, to side-on the other way. Once round, a fish drawn at width -1 is exactly one
+   * facing the other way at width 1, so it swaps to that and nothing jumps.
+   */
+  private swinging(dt: number): void {
+    this.swing = Math.min(1, this.swing + dt / SWING_TIME);
+    const e = (1 - Math.cos(Math.PI * this.swing)) / 2; // ease in and out
+    const a = this.swingFrom;
+    const b = this.swingTo;
+    this.vx = a.vx + (b.vx - a.vx) * e;
+    this.vy = a.vy + (b.vy - a.vy) * e;
+    this.angle = a.angle + (b.angle - a.angle) * e;
+    this.yaw = Math.cos(Math.PI * this.swing);
+    if (this.swing < 1) return;
+
+    this.facing = this.facing === 1 ? -1 : 1;
+    this.yaw = 1;
+    if (this.dart === "turn") {
+      this.dart = "back";
+      this.dartTimer = 0.4 + Math.random() * 0.2; // the leg back: at 1.5x speed, a bit further than 0.5-0.75 s at 0.9x was
+    } else {
       this.dart = "cruise";
       this.dartTimer = 3 + Math.random() * 3;
-      this.vx = this.cruiseVx;
-      this.vy = this.cruiseVy;
-      this.facing = this.vx > 0 ? 1 : -1;
       this.surge = 0.8;
     }
-    this.surge *= Math.exp(-2.5 * dt);
-    // lean along the diagonal; kept small, since the hitbox stays level
-    const lean = this.dart === "back" ? Math.max(-0.3, Math.min(0.3, Math.atan2(this.vy, Math.abs(this.vx)))) : 0;
-    this.angle += (this.facing * lean - this.angle) * Math.min(1, dt * 10);
+  }
+
+  /** Stop mid-swing, side-on and facing the way it looks (for a fish that gets hooked). */
+  settle(): void {
+    if (this.dart !== "turn" && this.dart !== "return") return;
+    if (this.yaw < 0) this.facing = this.facing === 1 ? -1 : 1;
+    this.yaw = 1;
+    this.dart = "cruise";
+    this.dartTimer = 3 + Math.random() * 3;
   }
 
   /** Draw the fish. `danger` swaps the outline for a red one (fish that can eat the player). */
@@ -163,7 +238,11 @@ export class Fish {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.scale(this.facing, Math.cos(Math.PI * this.flip));
+    // Mid-swing it looms a touch larger, turning toward you. It never gets thinner than a sliver,
+    // or it would vanish head-on; at that width the swap to the other side doesn't show.
+    const loom = 1 + 0.12 * (1 - Math.abs(this.yaw));
+    const width = (this.yaw < 0 ? -1 : 1) * Math.max(0.22, Math.abs(this.yaw));
+    ctx.scale(this.facing * width * loom, Math.cos(Math.PI * this.flip) * loom);
     if (this.skeleton) this.drawSkeleton(ctx);
     else if (this.kind === "shark") this.drawShark(ctx, time, danger);
     else this.drawFish(ctx, time, danger);
