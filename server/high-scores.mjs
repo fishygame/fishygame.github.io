@@ -237,6 +237,8 @@ function walletName(raw) {
   const name = cleanName(raw);
   if (!name) return { error: json(400, { error: `Use 1-${NAME_MAX} letters or numbers` }) };
   if (isRude(name)) return { error: json(400, { error: "Please pick a different name" }) };
+  // "Guest" is the game's no-name player, so no wallet can have it (everyone would share one)
+  if (name.toLowerCase() === "guest") return { error: json(400, { error: "Guest is for playing without a name. Pick your own!" }) };
   return { name, pk: `wallet#${name.toLowerCase()}` };
 }
 

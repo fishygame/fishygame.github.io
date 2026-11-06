@@ -52,6 +52,8 @@ for (const bad of [
   { wallet: "" },
   { wallet: "waytoolongname" },
   { wallet: "fuck" },
+  { wallet: "Guest" },
+  { wallet: " gUeSt " },
   { wallet: "Hunter", games: [{ id: "x", coins: 1 }] },
   { wallet: "Hunter", games: [{ id: "game-ddd4", coins: 9999 }] },
   { wallet: "Hunter", games: [{ id: "game-ddd4", coins: 1.5 }] },

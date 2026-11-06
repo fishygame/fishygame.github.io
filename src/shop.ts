@@ -60,6 +60,12 @@ export const LEVEL_COINS = 2; // per Survival level reached
 
 export type Equipped = Partial<Record<Slot, string>>;
 
+/** "Guest" means playing without a name, so it can't be a player's name too: you couldn't tell the
+ * two apart on the menu, and everyone who typed it would share one wallet. */
+export function isGuestName(name: string): boolean {
+  return name.trim().toLowerCase() === "guest";
+}
+
 interface Game {
   id: string;
   coins: number;
@@ -198,6 +204,7 @@ export class Wallet {
   async addPlayer(raw: string): Promise<void> {
     const name = raw.trim().replace(/\s+/g, " ");
     if (!name || name.length > NAME_MAX) throw new Error(LOCAL ? "Type your initials" : `Use 1-${NAME_MAX} letters or numbers`);
+    if (isGuestName(name)) throw new Error("Guest is for playing without a name. Pick your own!");
     const key = name.toLowerCase();
     if (this.d.players[key]) return this.switchTo(key);
     const state: State = fresh(name);
