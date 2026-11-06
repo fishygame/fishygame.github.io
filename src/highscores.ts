@@ -44,7 +44,7 @@ export const END_LABEL: Record<End, string> = {
 export interface Entry {
   name: string; // the player's name, or initials on a local board
   score: number;
-  time?: number; // Speed boards: how long the game took, in whole seconds
+  time?: number; // Speed and Survival boards: how long the game took, in whole seconds
   end?: End; // scores saved before 2026-11-02 have none
 }
 
@@ -143,13 +143,20 @@ function loadLocal(board: Board, period: Period): Entry[] {
     }
     let saved = JSON.parse(raw ?? "[]");
     if (period === "week") saved = saved?.week === weekStart() ? saved.scores : [];
-    return Array.isArray(saved) ? saved.filter((e) => typeof e?.score === "number").slice(0, TOP) : [];
+    return Array.isArray(saved) ? saved.filter((e) => typeof e?.score === "number" && named(e)).slice(0, TOP) : [];
   } catch {
     return []; // storage blocked or garbled: start fresh
   }
 }
 
+/** Skip used to save a local score as "---"; those (and any blank names) are dropped on load. */
+function named(e: Entry): boolean {
+  const name = typeof e.name === "string" ? e.name.trim() : "";
+  return name !== "" && name !== "---";
+}
+
 function saveLocal(board: Board, name: string, score: number, end: End, time?: number): Saved {
+  if (!name.trim()) throw new Error("Type your initials, or Skip");
   const entry: Entry = time === undefined ? { name, score, end } : { name, score, time, end };
   const result: Saved = { boards: { week: [], all: [], players: [] }, ranks: { week: -1, all: -1, players: -1 } };
   // all loaded before any are saved, as a first player best is made from the other two

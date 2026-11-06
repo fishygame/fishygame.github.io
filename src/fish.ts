@@ -14,12 +14,18 @@ export class Fish {
   skeleton = false; // what's left of the player after getting eaten
   flip = 0; // 0 upright .. 1 belly-up; in between it's mid-roll
   angle = 0; // tilt in radians, for hanging off a hook or leaning into a turn
-  darter = false; // now and then cuts back in a quick Z before carrying on (sharks)
+  darter = false; // now and then cuts back in a quick Z before carrying on (sharks, and fish in Survival)
   private dart: "cruise" | "back" = "cruise";
   private dartTimer = 2 + Math.random() * 3; // cruise: until the next dart; back: until turning forward again
   private cruiseVx = 0;
   private cruiseVy = 0;
   private surge = 0; // extra forward speed coming out of a dart, fading out
+  // The hero, holding still, glances about nervously (Thomas, 2026-11-05: "subtly"). Where the pupil
+  // sits, in eye widths from the eye's middle; straight ahead is (0.2, 0).
+  nervous = false;
+  private look = { x: 0.2, y: 0 };
+  private lookTo = { x: 0.2, y: 0 };
+  private lookTimer = 0;
   private phase = Math.random() * Math.PI * 2;
   // The parts that don't animate, painted once and reused every frame (see cached())
   private sprite: HTMLCanvasElement | null = null;
@@ -49,8 +55,37 @@ export class Fish {
 
   update(dt: number): void {
     if (this.darter) this.darting(dt);
+    this.glance(dt);
     this.x += this.vx * (1 + this.surge) * dt;
     this.y += this.vy * dt;
+  }
+
+  /** Nervous: every so often the pupil flicks somewhere new (mostly back the way it came, or up),
+   * now and then back ahead. Calm: it settles back to ahead. */
+  private glance(dt: number): void {
+    if (this.nervous) {
+      this.lookTimer -= dt;
+      if (this.lookTimer <= 0) {
+        const spots = [
+          [0.2, 0], // ahead
+          [-0.3, 0], // behind
+          [-0.22, -0.22], // up and behind
+          [0.08, -0.3], // up
+          [0.08, 0.28], // down
+        ];
+        let next;
+        do next = spots[Math.floor(Math.random() * spots.length)];
+        while (next[0] === this.lookTo.x && next[1] === this.lookTo.y);
+        this.lookTo = { x: next[0], y: next[1] };
+        this.lookTimer = 0.4 + Math.random() * 1.1;
+      }
+    } else {
+      this.lookTo = { x: 0.2, y: 0 };
+      this.lookTimer = 0.3; // the first glance comes soon after holding still
+    }
+    const k = Math.min(1, dt * 25); // a quick flick, not a slow roll
+    this.look.x += (this.lookTo.x - this.look.x) * k;
+    this.look.y += (this.lookTo.y - this.look.y) * k;
   }
 
   /**
@@ -210,6 +245,9 @@ export class Fish {
     this.finRays(ctx, -L * 0.8, 0, -L * 1.4, wag, B * 0.8, h);
 
     this.cached(ctx, danger, [-L * 0.9, -B * 1.3, L * 1.02, B * 1.15], (c) => this.fishBodyParts(c, danger));
+    // the cached eye looks ahead; a glancing one is painted over it (the white covers the old pupil)
+    if (!this.darter && (Math.abs(this.look.x - 0.2) > 0.01 || Math.abs(this.look.y) > 0.01))
+      this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a", this.look);
 
     // pectoral fin, flapping
     ctx.fillStyle = `hsl(${h} 75% 60% / 0.75)`;
@@ -291,7 +329,9 @@ export class Fish {
     ctx.lineTo(L * 0.82, B * 0.18);
     ctx.stroke();
 
-    this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a");
+    // fish that dart (Survival's later levels) get the same wild red eyes as darting sharks
+    if (this.darter) this.crazyEye(ctx, L * 0.58, -B * 0.18, this.r * 0.15);
+    else this.eye(ctx, L * 0.58, -B * 0.18, this.r * 0.15, "#1a1a1a");
   }
 
   private fishBody(ctx: CanvasRenderingContext2D, L: number, B: number): void {
@@ -443,14 +483,21 @@ export class Fish {
     return Math.min(6, Math.max(2, this.r * 0.05));
   }
 
-  private eye(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, pupil: string): void {
+  private eye(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    size: number,
+    pupil: string,
+    look = { x: 0.2, y: 0 },
+  ): void {
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(x, y, size, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = pupil;
     ctx.beginPath();
-    ctx.arc(x + size * 0.2, y, size * 0.65, 0, Math.PI * 2);
+    ctx.arc(x + size * look.x, y + size * look.y, size * 0.65, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.beginPath();

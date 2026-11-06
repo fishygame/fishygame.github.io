@@ -77,6 +77,14 @@ export class Crab {
     }
   }
 
+  /** Change how often it comes by without chasing it off. Switched on, the first visit is soon;
+   * switched off (null), a crab already about finishes its visit and doesn't come back. */
+  setTiming(timing: Timing | null): void {
+    if (this.phase === "idle" && !timing) this.timer = Infinity;
+    else if (this.phase === "idle" && timing && !this.timing) this.timer = between(timing.first);
+    this.timing = timing;
+  }
+
   /** Stop and snap its claws over its catch for a moment. */
   pinch(): void {
     this.phase = "pause";

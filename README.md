@@ -33,6 +33,17 @@ to the fishygame org.
 - **Classic** scores each fish by its size next to yours (bigger meals are worth far more).
   **Speed** scores every fish the same, times a combo that grows with each bite taken within 2
   seconds of the last (up to x10), plus a time bonus for winning under 5 minutes.
+  **Survival** starts you a bit bigger, but you never grow and every fish is bigger than you: you
+  score 10 points a second for staying alive, and holding still (no keys or finger, nearly stopped)
+  builds a multiplier up to x5, one step a second, which moving resets. A new level comes every
+  20 seconds. Survival has no Easy/Medium/Hard (the menu hides the picker): the levels are the
+  difficulty, and it keeps one set of boards (stored under `medium`). It's busy from the start: the
+  sea begins half full, with a few plain sharks. A hook comes at level 2, a crab and darting sharks
+  at 3, two hooks at 4, two crabs at 5, and so on to four hooks and three crabs by level 8; a few
+  fish start darting (red eyes) at level 10, more each level after. The crowd and the sharks build
+  slowly and peak around levels 13-15. Fish start anywhere from the surface to the sand and hooks
+  can drop to the sand, so the bottom is no hideout. How many fish there are scales with the
+  screen's size, so a big monitor is as crowded as a laptop. The levels are `survivalRamp()` in `src/settings.ts`.
 - **Medium** is the original game. **Easy** has no sharks or crab, a gentler start and rarer
   hooks. **Hard** has more sharks (all of them darters), more hooks and crabs, more fast fish,
   and no red outlines on the fish that can eat you.
@@ -66,7 +77,7 @@ to the fishygame org.
 ## Layout
 
 - `src/main.ts`: game loop, input, spawning, collisions, scoring, HUD and screens
-- `src/settings.ts`: the game modes, and the tuning for each difficulty
+- `src/settings.ts`: the game modes, the tuning for each difficulty, and Survival's levels
 - `src/fish.ts`: the `Fish` class (movement, and drawing for both fish and sharks)
 - `src/hook.ts`: the fishing line that drops in now and then, and sometimes catches a fish
 - `src/crab.ts`: the crab that scuttles along the sand now and then
@@ -102,7 +113,7 @@ top 10 names by their best score; until a board's first save it's made on the fl
 all-time and weekly boards. GET returns `{ scores, weekly, players }`; POST returns `{ scores,
 rank, weekly, weeklyRank, players, playerRank }`. Requests without a
 mode or difficulty get Classic on Medium, so update the Lambda before deploying a game that
-sends them. Speed boards also keep each game's time (`time`, whole seconds); scores saved
+sends them. Speed and Survival boards also keep each game's time (`time`, whole seconds); scores saved
 before 2026-10-25's time update have none and show a dash. Every score keeps how the game ended (`end`: `won`, `shark`, `fish`, `hook` or `crab`; anything else gets a 400), shown with the labels in `END_LABEL` in `src/highscores.ts`. After editing `server/high-scores.mjs`, upload it with:
 
 ```powershell

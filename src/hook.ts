@@ -25,26 +25,35 @@ export class Hook {
   private y = 0; // the hook's eye
   private depth = 0; // where it stops on the way down
   private phase: "idle" | "drop" | "wait" | "reel" = "idle";
-  private timing = HOOK_TIMING;
+  private timing: Timing | null = HOOK_TIMING;
   private timer = between(HOOK_TIMING.first); // idle: until it drops; wait: until reeled; reel: time reeling
   private seed = 0;
   private snapped = false; // bitten off: the line goes up empty
   private lurking = false; // waited long enough; now hoping another fish bites
   private catch: Fish | null = null; // another fish, being reeled in
   caught = false; // reeling up the player
+  deep = false; // Survival: drops anywhere down to the sand, so the bottom isn't a hideout
 
   resize(W: number, H: number): void {
     this.W = W;
     this.H = H;
   }
 
-  /** Start over with nothing in the water. */
-  reset(timing = HOOK_TIMING): void {
+  /** Start over with nothing in the water. With no timing, none drops at all. */
+  reset(timing: Timing | null = HOOK_TIMING): void {
     this.timing = timing;
     this.phase = "idle";
-    this.timer = between(timing.first);
+    this.timer = timing ? between(timing.first) : Infinity;
     this.caught = false;
     this.catch = null;
+  }
+
+  /** Change how often it comes by without pulling it out of the water. Switched on, the first drop
+   * is soon; switched off (null), a hook already down finishes its visit and doesn't come back. */
+  setTiming(timing: Timing | null): void {
+    if (this.phase === "idle" && !timing) this.timer = Infinity;
+    else if (this.phase === "idle" && timing && !this.timing) this.timer = between(timing.first);
+    this.timing = timing;
   }
 
   update(dt: number): void {
@@ -53,7 +62,10 @@ export class Hook {
       if (this.timer > 0) return;
       this.x = this.W * (0.15 + Math.random() * 0.7);
       this.y = -60;
-      this.depth = this.H * (0.3 + Math.random() * 0.3);
+      // deep: the bite zone (about 42 px below the eye) can reach a fish lying on the sand
+      this.depth = this.deep
+        ? this.H * 0.25 + Math.random() * Math.max(0, this.H * 0.75 - 45)
+        : this.H * (0.3 + Math.random() * 0.3);
       this.phase = "drop";
       this.timer = between(WAIT);
       this.seed = Math.random() * 100;
@@ -78,7 +90,7 @@ export class Hook {
       this.y -= Math.min(REEL_SPEED, 40 + this.timer * 300) * dt;
       if (this.y < -this.H) {
         this.phase = "idle";
-        this.timer = between(this.timing.gap);
+        this.timer = this.timing ? between(this.timing.gap) : Infinity;
         this.catch = null;
       }
     }

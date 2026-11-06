@@ -10,8 +10,8 @@
 // It started (2026-11-02) from whoever was on the all-time and weekly boards then.
 // Every score also keeps how the game ended (`end`: won, shark, fish, hook or crab); scores saved
 // before 2026-11-02 have none.
-// Speed boards also keep how long each game took (`time`, whole seconds); scores saved before that
-// have none.
+// Speed and Survival boards also keep how long each game took (`time`, whole seconds); Speed scores
+// saved before that have none.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
 // the page still work. Names are checked here, not in the game, so the filter can't be skipped by
 // editing the page.
@@ -29,7 +29,7 @@ const NAME_MAX = 8;
 const MAX_SCORE = 1_000_000; // far beyond a real game; anything bigger is someone poking the API
 const MAX_TIME = 3600; // seconds; likewise
 const COOLDOWN = 10; // seconds between submissions from the same IP
-const MODES = ["classic", "speed"];
+const MODES = ["classic", "speed", "survival"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const ENDS = ["won", "shark", "fish", "hook", "crab"]; // you won, or what got you
 
@@ -162,7 +162,7 @@ async function submit(event) {
   if (!Number.isInteger(score) || score < 1 || score > MAX_SCORE) return json(400, { error: "Bad score" });
   if (!name) return json(400, { error: `Use 1-${NAME_MAX} letters or numbers` });
   if (isRude(name)) return json(400, { error: "Please pick a different name" });
-  const time = body.mode === "speed" ? body.time : undefined;
+  const time = body.mode === "speed" || body.mode === "survival" ? body.time : undefined;
   if (time !== undefined && (!Number.isInteger(time) || time < 0 || time > MAX_TIME)) {
     return json(400, { error: "Bad time" });
   }

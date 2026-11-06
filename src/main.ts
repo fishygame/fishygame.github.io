@@ -2,8 +2,8 @@ import "./style.css";
 import { Fish } from "./fish";
 import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
-import { Hook } from "./hook";
-import { Crab } from "./crab";
+import { HOOK_TIMING, Hook } from "./hook";
+import { CRAB_TIMING, Crab } from "./crab";
 import {
   BOARD_TITLE,
   type Boards,
@@ -21,7 +21,19 @@ import {
   submitScore,
 } from "./highscores";
 import { TRACKS } from "./music";
-import { BLURB, DIFFICULTIES, DIFFICULTY, type Difficulty, LABEL, MODES, type Mode } from "./settings";
+import {
+  BLURB,
+  DIFFICULTIES,
+  DIFFICULTY,
+  type Difficulty,
+  LABEL,
+  MODES,
+  type Mode,
+  type Ramp,
+  SURVIVAL_BOARD,
+  SURVIVAL_LEVEL,
+  survivalRamp,
+} from "./settings";
 
 type State = "menu" | "playing" | "dead" | "won";
 
@@ -43,6 +55,18 @@ const COMBO_WINDOW = 2;
 const COMBO_MAX = 10;
 const SPEED_PAR = 300; // seconds
 const TIME_BONUS = 100; // points per second under par
+// Survival: you start a bit bigger and never grow, and score for every second you last. Holding
+// still (no keys or finger, and nearly stopped) is riskier, so it builds a multiplier, one step per
+// STILL_STEP seconds up to STILL_MAX; moving drops it back to x1. The levels are in settings.ts.
+const SURVIVAL_RADIUS = 20;
+const SURVIVAL_POINTS = 10; // per second
+const STILL_STEP = 1;
+const STILL_MAX = 5;
+const STILL_SPEED = 15; // px/s; slower than this counts as still
+const NERVOUS_AFTER = 0.8; // s held still, in any mode, before the hero's eyes start darting about
+const LEVEL_BANNER = 2.5; // seconds the "Level 4" banner shows
+const MAX_HOOKS = 4; // at once, on Survival's last levels; the other modes use one
+const MAX_CRABS = 3;
 const WIN_GLIDE = 3; // how quickly you glide to the middle and swell up after winning; higher is faster
 const MIN_FOOD = 6; // always at least this many fish you can eat around (outside the frenzy)
 const MAX_FISH = 18;
@@ -86,8 +110,18 @@ const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 let W = 0;
 let H = 0;
 const scenery = new Scenery();
-const hook = new Hook();
-const crab = new Crab();
+// The first of each is the one hook and crab of Classic and Speed (and behind the menu); the rest
+// only come out in Survival.
+const hooks = Array.from({ length: MAX_HOOKS }, (_, i) => {
+  const h = new Hook();
+  if (i) h.reset(null);
+  return h;
+});
+const crabs = Array.from({ length: MAX_CRABS }, (_, i) => {
+  const c = new Crab();
+  if (i) c.reset(null);
+  return c;
+});
 
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
@@ -100,8 +134,8 @@ function resize(): void {
   canvas.style.height = `${H}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   scenery.resize(W, H, dpr);
-  hook.resize(W, H);
-  crab.resize(W, H);
+  for (const h of hooks) h.resize(W, H);
+  for (const c of crabs) c.resize(W, H);
 }
 window.addEventListener("resize", resize);
 // The browser can drop the canvas now and then (a graphics driver reset, say). It comes back blank
@@ -262,6 +296,8 @@ let endedAt = 0;
 let killer: Fish | null = null;
 let hooked = false; // caught on the fishing line, rather than eaten
 let pinched = false; // got by the crab
+let catcher = hooks[0]; // which hook or crab got you
+let pincher = crabs[0];
 let time = 0;
 // what's picked on the title menu, remembered for next visit
 let mode: Mode = loadChoice("fishy-mode", MODES, "classic");
@@ -274,6 +310,13 @@ let startedAt = 0;
 let combo = 0; // bites in the current chain; 0 once it's lapsed
 let lastBite = 0;
 let timeBonus = 0;
+// Survival
+let level = 1;
+let ramp: Ramp = survivalRamp(1);
+let levelNews = ""; // what the new level brings, for the banner
+let levelUpAt = -Infinity;
+let stillFor = 0; // seconds held still
+let points = 0; // the score, with the fractions of a point that build up every frame
 
 function loadChoice<T extends string>(key: string, options: T[], fallback: T): T {
   try {
@@ -284,13 +327,14 @@ function loadChoice<T extends string>(key: string, options: T[], fallback: T): T
   }
 }
 
-function makePlayer(): Fish {
-  return new Fish(W / 2, H / 2, 0, 0, START_RADIUS, 26); // orange; much redder clashes with the danger outlines
+function makePlayer(r = START_RADIUS): Fish {
+  return new Fish(W / 2, H / 2, 0, 0, r, 26); // orange; much redder clashes with the danger outlines
 }
 
 function reset(): void {
   state = "playing";
-  player = makePlayer();
+  const survival = mode === "survival";
+  player = makePlayer(survival ? SURVIVAL_RADIUS : START_RADIUS);
   fish = [];
   score = 0;
   spawnTimer = 0;
@@ -298,8 +342,16 @@ function reset(): void {
   hooked = false;
   pinched = false;
   tuning = DIFFICULTY[difficulty];
-  hook.reset(tuning.hook);
-  crab.reset(tuning.crab);
+  // Survival starts with no hooks or crabs; they switch on as the levels go up (see survive())
+  hooks.forEach((h, i) => h.reset(survival || i ? null : tuning.hook));
+  crabs.forEach((c, i) => c.reset(survival || i ? null : tuning.crab));
+  level = 1;
+  ramp = survivalRamp(1);
+  levelNews = "Stay alive!";
+  levelUpAt = survival ? time : -Infinity;
+  stillFor = 0;
+  points = 0;
+  if (survival) fillSea();
   startedAt = time;
   combo = 0;
   timeBonus = 0;
@@ -368,7 +420,10 @@ function syncUI(): void {
 function showMenu(): void {
   state = "menu";
   player = makePlayer();
-  if (!tuning.crab) crab.reset(); // back from Easy: let it scuttle by behind the menu again
+  // back to one hook and one crab coming by behind the menu (after Easy's no crab, or Survival's
+  // crowd); any extras still about finish their visit and stay away
+  hooks.forEach((h, i) => h.setTiming(i ? null : HOOK_TIMING));
+  crabs.forEach((c, i) => c.setTiming(i ? null : CRAB_TIMING));
   showScreen("main");
   syncUI();
 }
@@ -415,7 +470,10 @@ function syncPicks(): void {
                 : "off";
     b.setAttribute("aria-pressed", String(b.dataset.value === picked));
   }
-  menu.querySelector(".pick-help")!.textContent = `${BLURB[mode]} ${BLURB[difficulty]}`;
+  // Survival has no difficulty, so its picker goes away (the choice is kept for the other modes)
+  const survival = mode === "survival";
+  for (const p of menu.querySelectorAll<HTMLElement>('.pick[data-pick="difficulty"]')) p.style.display = survival ? "none" : "";
+  menu.querySelector(".pick-help")!.textContent = survival ? BLURB.survival : `${BLURB[mode]} ${BLURB[difficulty]}`;
   menu.querySelector(".board-help")!.textContent =
     period === "week" ? "Starts fresh every Monday." : period === "players" ? "Each player's best score." : "";
 }
@@ -510,17 +568,22 @@ sound.onSongChange = (id) => {
   renderSongs();
 };
 
-/** "Speed · Hard", say. */
+/** "Speed · Hard", say, or just "Survival". */
 function boardName(): string {
-  return `${LABEL[mode]} · ${LABEL[difficulty]}`;
+  return mode === "survival" ? LABEL[mode] : `${LABEL[mode]} · ${LABEL[difficulty]}`;
+}
+
+/** The difficulty the current mode's boards are kept under: Survival has just the one. */
+function boardDifficulty(): Difficulty {
+  return mode === "survival" ? SURVIVAL_BOARD : difficulty;
 }
 
 /** The boards for the current mode and difficulty, freshly fetched. Resolves to null if the
  * choice changes while they load. */
 async function loadBoard(): Promise<Boards | null> {
-  const [m, d] = [mode, difficulty];
+  const [m, d] = [mode, boardDifficulty()];
   const fetched = await fetchScores({ mode: m, difficulty: d });
-  if (m !== mode || d !== difficulty) return null;
+  if (m !== mode || d !== boardDifficulty()) return null;
   boards = fetched;
   return fetched;
 }
@@ -571,7 +634,7 @@ function renderMenuScores(scores: Entry[]): void {
     points.className = "points";
     points.textContent = entry.score.toLocaleString();
     li.append(name, end);
-    if (mode === "speed") {
+    if (timed()) {
       const took = document.createElement("span");
       took.className = "time";
       took.textContent = boardTime(entry);
@@ -624,7 +687,6 @@ let myRanks: Record<Period, number> = { week: -1, all: -1, players: -1 };
 let entering = false;
 // the last name (or initials) typed, so next time it's already filled in
 const NAME_KEY = LOCAL ? "fishy-initials" : "fishy-name";
-const NO_INITIALS = "---"; // a local score saved without any
 
 nameInput.maxLength = NAME_MAX;
 if (LOCAL) {
@@ -671,7 +733,7 @@ form.addEventListener("submit", async (e) => {
   try {
     const name = nameInput.value.trim();
     if (LOCAL && !name) throw new Error("Type your initials, or Skip");
-    showSaved(await submitScore({ mode, difficulty }, name, score, ending(), scoreTime()));
+    showSaved(await submitScore({ mode, difficulty: boardDifficulty() }, name, score, ending(), scoreTime()));
     try {
       localStorage.setItem(NAME_KEY, name);
     } catch {
@@ -686,9 +748,13 @@ form.addEventListener("submit", async (e) => {
 });
 document.getElementById("hs-skip")!.addEventListener("click", skipForm);
 
-/** Speed boards keep how long the game took; Classic ones don't. */
+/** Speed and Survival boards keep how long the game took; Classic ones don't. */
+function timed(): boolean {
+  return mode !== "classic";
+}
+
 function scoreTime(): number | undefined {
-  return mode === "speed" ? Math.floor(elapsed()) : undefined;
+  return timed() ? Math.floor(elapsed()) : undefined;
 }
 
 /** How the game that just finished ended. */
@@ -699,18 +765,14 @@ function ending(): End {
   return killer?.kind === "shark" ? "shark" : "fish";
 }
 
-/** A Speed board entry's time, or a dash for scores saved before times were kept. */
+/** A Speed or Survival board entry's time, or a dash for Speed scores saved before times were kept. */
 function boardTime(entry: Entry): string {
   return entry.time === undefined ? "—" : clock(entry.time);
 }
 
-/** Skipping leaves a shared board alone, but your own board still keeps the score. */
+/** Skipping saves nothing, on either board: a score only goes up with a name on it. */
 function skipForm(): void {
   closeForm();
-  if (!LOCAL) return;
-  submitScore({ mode, difficulty }, NO_INITIALS, score, ending(), scoreTime())
-    .then(showSaved)
-    .catch((err) => console.warn(err));
 }
 
 function showSaved(saved: Saved): void {
@@ -719,7 +781,13 @@ function showSaved(saved: Saved): void {
 }
 
 // ---- spawning ----
+/** Survival's game is on (behind the menu, fish swim by as usual whatever's picked). */
+function surviving(): boolean {
+  return mode === "survival" && state !== "menu";
+}
+
 function spawnFish(): void {
+  if (surviving()) return spawnSurvivalFish();
   const topSize = winRadius() * TOP_FISH_SHARE;
   const frenzy = inFrenzy();
   const e = earlyDone();
@@ -751,31 +819,73 @@ function spawnFish(): void {
   if ((shark || r >= player.r) && cover(fish.filter(dangerous)) + bodyCover(r) > dangerLimit) return;
   if (cover(fish) + bodyCover(r) > (frenzy ? FRENZY_MAX_COVER : MAX_COVER)) return;
 
+  launch(r, shark, giant, tuning.fastChance).darter = shark && Math.random() < tuning.darterChance;
+}
+
+/** Survival's fish count is for a 1280×800 screen; a bigger screen gets more (and a phone fewer),
+ * so it's just as crowded. */
+function screenScale(): number {
+  return Math.min(2, Math.max(0.5, (W * H) / (1280 * 800)));
+}
+
+/** Survival starts with the sea already half full, rather than waiting for fish to swim in. None
+ * start near you, so there's a moment to get your bearings. */
+function fillSea(): void {
+  const want = Math.round((ramp.maxFish * screenScale()) / 2);
+  for (let tries = 0; fish.length < want && tries < want * 4; tries++) {
+    const x = Math.random() * W;
+    if (Math.abs(x - W / 2) > 220) spawnSurvivalFish(x);
+  }
+}
+
+/** Survival: everything's bigger than you, in the mix the level calls for. `x` places it mid-screen
+ * instead of off to one side. */
+function spawnSurvivalFish(x?: number): void {
+  const roll = Math.random();
+  const shark = roll < ramp.sharkChance;
+  const giant = !shark && roll < ramp.sharkChance + ramp.giantChance;
+  let r: number;
+  if (shark) r = Math.max(20, player.r * (1.1 + Math.random() * 0.8));
+  else if (giant) r = Math.max(90 + Math.random() * 90, player.r * (2.2 + Math.random() * 1.5));
+  else r = player.r * (ramp.bigger[0] + Math.random() * (ramp.bigger[1] - ramp.bigger[0]));
+  if (cover(fish) + bodyCover(r) > ramp.dangerCover) return;
+  const f = launch(r, shark, giant, ramp.fastChance, 1 + (shark ? ramp.sharkSpeedUp : ramp.speedUp), x);
+  // giants are too slow and big to dart
+  f.darter = !giant && Math.random() < (shark ? ramp.darterChance : ramp.fishDarterChance);
+}
+
+/** Send a fish of size r in from one side or the other (or start it at `at`, already on screen). */
+function launch(r: number, shark: boolean, giant: boolean, fastChance: number, speedUp = 1, at?: number): Fish {
   const fromLeft = Math.random() < 0.5;
   // giants cruise slowly so there's time to get out of the way
   let speed = 40 + Math.random() * 100 + 300 / (r + 10);
-  if (!giant && r > player.r && Math.random() < tuning.fastChance) speed *= 1.4 + Math.random() * 0.4;
+  if (!giant && r > player.r && Math.random() < fastChance) speed *= 1.4 + Math.random() * 0.4;
   if (giant) speed = 30 + Math.random() * 40;
   if (shark) speed = 110 + Math.random() * 80;
+  speed *= speedUp;
   const margin = r * 1.5; // just out of sight, so big ones don't take ages to arrive
-  const x = fromLeft ? -margin : W + margin;
-  const y = r * 0.6 + Math.random() * Math.max(1, H - SAND_HEIGHT - r * 0.6);
+  const x = at ?? (fromLeft ? -margin : W + margin);
+  // Survival uses the whole height, sand included: with fish only above the sand, hugging the
+  // bottom was a hideout (Thomas's son, 2026-11-05)
+  const [top, bottom] = surviving() ? [r * 0.5, H - r * 0.4] : [r * 0.6, H - SAND_HEIGHT];
+  const y = top + Math.random() * Math.max(1, bottom - top);
   const vy = (Math.random() - 0.5) * 30;
   const hue = FISH_HUES[0] + Math.random() * (FISH_HUES[1] - FISH_HUES[0]);
 
   const f = new Fish(x, y, fromLeft ? speed : -speed, vy, r, hue, shark ? "shark" : "fish");
-  f.darter = shark && Math.random() < tuning.darterChance;
   fish.push(f);
+  return f;
 }
 
-/** Past the top fish size, nothing can eat you any more. */
+/** Past the top fish size, nothing can eat you any more. Survival never gets there. */
 function inFrenzy(): boolean {
-  return player.r >= winRadius() * TOP_FISH_SHARE;
+  return !surviving() && player.r >= winRadius() * TOP_FISH_SHARE;
 }
 
 function dangerous(f: Fish): boolean {
-  // sharks can't be eaten, until the frenzy, when you're too big for anything to hurt you
-  return f.r >= player.r || (f.kind === "shark" && !inFrenzy());
+  // sharks can't be eaten, until the frenzy, when you're too big for anything to hurt you; in
+  // Survival nothing can be eaten
+  return surviving() || f.r >= player.r || (f.kind === "shark" && !inFrenzy());
 }
 
 /** Share of the screen a fish's body covers; it's roughly an ellipse 2.4r long and 1.24r tall. */
@@ -792,8 +902,11 @@ function update(dt: number): void {
   if (paused) return;
   time += dt;
   scenery.update(dt);
-  hook.update(dt);
-  crab.update(dt);
+  for (const h of hooks) {
+    h.deep = surviving(); // depth is picked as it drops, so a hook already down stays put
+    h.update(dt);
+  }
+  for (const c of crabs) c.update(dt);
   if (combo && time - lastBite > COMBO_WINDOW) combo = 0;
 
   for (const b of bubbles) {
@@ -820,7 +933,7 @@ function update(dt: number): void {
     for (const f of fish) f.update(dt);
     if (hooked) {
       // dangling nose-up from the hook as it's reeled in
-      const p = hook.hangPoint(time, player.r);
+      const p = catcher.hangPoint(time, player.r);
       player.x = p.x;
       player.y = p.y;
       player.angle = -player.facing * Math.PI / 2;
@@ -865,46 +978,64 @@ function update(dt: number): void {
   const [top, bottom] = swimRange(player);
   if (player.y < top || player.y > bottom) player.vy = 0;
   player.y = Math.min(bottom, Math.max(top, player.y));
+  // holding still: Survival's multiplier counts it, and in any mode the hero gets nervous
+  const still = !steer.x && !steer.y && Math.hypot(player.vx, player.vy) < STILL_SPEED;
+  stillFor = still ? stillFor + dt : 0;
+  player.nervous = stillFor > NERVOUS_AFTER;
+
+  if (mode === "survival") survive(dt);
 
   // spawn
   spawnTimer -= dt;
   const frenzy = inFrenzy();
   const early = earlyDone();
-  const maxFish = frenzy ? FRENZY_MAX_FISH : Math.round(EARLY_MAX_FISH + (MAX_FISH - EARLY_MAX_FISH) * early);
+  const maxFish =
+    mode === "survival"
+      ? Math.round(ramp.maxFish * screenScale())
+      : frenzy
+        ? FRENZY_MAX_FISH
+        : Math.round(EARLY_MAX_FISH + (MAX_FISH - EARLY_MAX_FISH) * early);
   if (spawnTimer <= 0 && fish.length < maxFish) {
     spawnFish();
-    spawnTimer = frenzy
-      ? FRENZY_SPAWN_INTERVAL
-      : EARLY_SPAWN_INTERVAL + (SPAWN_INTERVAL - EARLY_SPAWN_INTERVAL) * early;
+    spawnTimer =
+      mode === "survival"
+        ? ramp.spawnInterval / screenScale()
+        : frenzy
+          ? FRENZY_SPAWN_INTERVAL
+          : EARLY_SPAWN_INTERVAL + (SPAWN_INTERVAL - EARLY_SPAWN_INTERVAL) * early;
   }
 
   // move fish, collide, cull
   hookAFish();
-  // the fishing hook: deadly, unless you're big enough to bite right through the line
-  const bait = hook.bait(time);
-  if (bait && overlaps({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius })) {
+  // fishing hooks: deadly, unless you're big enough to bite right through the line
+  for (const h of hooks) {
+    const bait = h.bait(time);
+    if (!bait || !overlaps({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius })) continue;
     if (inFrenzy()) {
-      hook.snap();
+      h.snap();
       sound.eat(0.7);
     } else {
-      hook.catchPlayer();
+      h.catchPlayer();
       sound.caught();
       hooked = true;
+      catcher = h;
       endGame("dead");
       return;
     }
   }
-  // the crab on the sand: deadly too, unless you're big enough to eat it
-  const claws = crab.hitbox();
-  if (claws && overlaps(claws)) {
+  // crabs on the sand: deadly too, unless you're big enough to eat them
+  for (const c of crabs) {
+    const claws = c.hitbox();
+    if (!claws || !overlaps(claws)) continue;
     if (inFrenzy()) {
-      crab.eaten();
+      c.eaten();
       sound.eat(0.8);
       score += bitePoints(CRAB_POINTS);
     } else {
-      crab.pinch();
+      c.pinch();
       sound.eaten();
       pinched = true;
+      pincher = c;
       player.skeleton = true;
       endGame("dead");
       return;
@@ -938,6 +1069,41 @@ function update(dt: number): void {
       }
     }
   }
+}
+
+/** Survival, every frame: level up when it's time, and score the time you've lasted. */
+function survive(dt: number): void {
+  const now = 1 + Math.floor(elapsed() / SURVIVAL_LEVEL);
+  if (now !== level) {
+    const before = ramp;
+    level = now;
+    ramp = survivalRamp(level);
+    levelNews = news(before, ramp);
+    levelUpAt = time;
+  }
+  // extra hooks and crabs switch on (and their visits get closer together) as the levels go up
+  hooks.forEach((h, i) => h.setTiming(i < ramp.hooks ? ramp.hookTiming : null));
+  crabs.forEach((c, i) => c.setTiming(i < ramp.crabs ? ramp.crabTiming : null));
+
+  points += SURVIVAL_POINTS * stillMultiplier() * dt;
+  score = Math.floor(points);
+}
+
+/** Points multiplier for holding still: x1 while moving, up to STILL_MAX. */
+function stillMultiplier(): number {
+  return 1 + Math.min(STILL_MAX - 1, Math.floor(stillFor / STILL_STEP));
+}
+
+/** What a new Survival level brings, in a few words for the banner. */
+function news(before: Ramp, after: Ramp): string {
+  const said: string[] = [];
+  if (!before.sharkChance && after.sharkChance) said.push("Sharks!");
+  if (after.hooks > before.hooks) said.push(after.hooks === 1 ? "Fishing hooks!" : `${after.hooks} hooks at once!`);
+  if (after.crabs > before.crabs) said.push(after.crabs === 1 ? "A crab!" : `${after.crabs} crabs!`);
+  if (!before.darterChance && after.darterChance) said.push("Sharks start darting!");
+  else if (before.darterChance < 1 && after.darterChance === 1) said.push("Every shark darts!");
+  if (!before.fishDarterChance && after.fishDarterChance) said.push("Fish start darting!");
+  return said.length ? said.join(" ") : "More fish, and faster!";
 }
 
 /** How far you are from starting size (0) to winning size (1). */
@@ -1003,14 +1169,16 @@ function capsulesTouch(a: Capsule, b: Capsule): boolean {
 
 /** Once the hook's waited long enough, the first fish to swim into the bait gets reeled in. */
 function hookAFish(): void {
-  const bait = hook.bait(time);
-  if (!bait) return;
-  const i = fish.findIndex(
-    (f) => hook.wants(f) && capsulesTouch({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius }, f.hitbox()),
-  );
-  if (i === -1) return;
-  hook.catchFish(fish[i]);
-  fish.splice(i, 1);
+  for (const h of hooks) {
+    const bait = h.bait(time);
+    if (!bait) continue;
+    const i = fish.findIndex(
+      (f) => h.wants(f) && capsulesTouch({ x0: bait.x, x1: bait.x, y: bait.y, radius: bait.radius }, f.hitbox()),
+    );
+    if (i === -1) continue;
+    h.catchFish(fish[i]);
+    fish.splice(i, 1);
+  }
 }
 
 // ---- drawing ----
@@ -1034,14 +1202,27 @@ function drawHud(): void {
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   const speed = mode === "speed";
-  ctx.fillText(speed ? `Score: ${score} · ${clock(elapsed())}` : `Score: ${score}`, 16, 14);
+  ctx.fillText(timed() ? `Score: ${score} · ${clock(elapsed())}` : `Score: ${score}`, 16, 14);
 
-  // growth bar toward the win size
+  // growth bar toward the win size; in Survival, toward the next level
   const barW = 200;
+  const levelLength = SURVIVAL_LEVEL;
+  const fill = mode === "survival" ? (elapsed() % levelLength) / levelLength : progress();
   ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
   ctx.fillRect(16, 46, barW, 10);
-  ctx.fillStyle = "#ffd166";
-  ctx.fillRect(16, 46, barW * progress(), 10);
+  ctx.fillStyle = mode === "survival" ? "#7ee8fa" : "#ffd166";
+  ctx.fillRect(16, 46, barW * fill, 10);
+  if (mode === "survival") {
+    // under the bar, clear of the corner buttons on a phone; the still bonus in gold so it stands out
+    ctx.font = "bold 18px system-ui, sans-serif";
+    const label = `Level ${level}`;
+    ctx.fillText(label, 16, 62);
+    const x = stillMultiplier();
+    if (x > 1) {
+      ctx.fillStyle = "#ffd166";
+      ctx.fillText(` · Still x${x}`, 16 + ctx.measureText(label).width, 62);
+    }
+  }
 
   // Speed: the combo, with a bar under the growth bar for the time left to keep it going
   if (speed && combo) {
@@ -1060,7 +1241,26 @@ function drawHud(): void {
   const hint = touchUI
     ? "Drag anywhere to swim"
     : `Arrows / WASD to swim · Space to pause · N for the next song · M to ${mute}`;
-  ctx.fillText(hint, 16, speed ? 72 : 66);
+  ctx.fillText(hint, 16, mode === "survival" ? 88 : speed ? 72 : 66);
+  ctx.restore();
+}
+
+/** Survival: "Level 4" and what it brings, big in the middle, fading out. */
+function drawLevelBanner(): void {
+  const t = time - levelUpAt;
+  if (state !== "playing" || t > LEVEL_BANNER) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (LEVEL_BANNER - t) / 0.6);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 48px system-ui, sans-serif";
+  ctx.fillText(`Level ${level}`, W / 2, H * 0.3);
+  ctx.font = "22px system-ui, sans-serif";
+  ctx.fillStyle = "#ffd166";
+  ctx.fillText(levelNews, W / 2, H * 0.3 + 44, W - 32);
   ctx.restore();
 }
 
@@ -1155,10 +1355,10 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   }
   if (state === "dead" && hooked) {
     player.draw(ctx, time);
-    hook.draw(ctx, time);
+    catcher.draw(ctx, time);
   }
   if (state === "dead" && pinched) {
-    crab.draw(ctx);
+    pincher.draw(ctx);
     player.draw(ctx, time);
   }
   // and show off how enormous you got
@@ -1169,9 +1369,10 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const took = mode === "speed" ? ` · ${clock(elapsed())}` : "";
+  const took = timed() ? ` · ${clock(elapsed())}` : "";
+  const reached = mode === "survival" ? ` · Level ${level}` : "";
   const bonus = state === "won" && timeBonus ? ` (+${timeBonus.toLocaleString()} time bonus)` : "";
-  const scoreLine = `Score: ${score.toLocaleString()}${took}${bonus}`;
+  const scoreLine = `Score: ${score.toLocaleString()}${took}${reached}${bonus}`;
   showBoard &&= boards !== null;
 
   // typing a name: everything moves up, and the name form (CSS) sits at H / 2 - 10
@@ -1220,9 +1421,9 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
 }
 
 /** Half a board's width on the end screen: room for the rank, name, ending and score, and on
- * Speed boards the time too. */
+ * Speed and Survival boards the time too. */
 function boardHalf(): number {
-  return Math.min(mode === "speed" ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
+  return Math.min(timed() ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
 }
 
 // The end screen from the title's top to the Main menu button's bottom, besides the board's rows.
@@ -1244,7 +1445,7 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
   const mine = myRanks[period];
   let shown = list.slice(0, rows).map((entry, i) => ({ entry, i }));
   if (mine >= rows) shown = [...shown.slice(0, rows - 1), { entry: list[mine], i: mine }];
-  const speed = mode === "speed";
+  const speed = timed();
   const left = cx - half;
   // a panel behind it, so fish swimming past don't make it hard to read
   ctx.save();
@@ -1298,20 +1499,23 @@ function draw(): void {
 
   if (state === "menu") {
     for (const f of fish) f.draw(ctx, time);
-    hook.draw(ctx, time);
+    for (const h of hooks) h.draw(ctx, time);
     scenery.drawFront(ctx, time);
-    crab.draw(ctx); // on the front of the sand, so in front of the seaweed too
+    for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
     drawButtons();
     return;
   }
 
-  for (const f of fish) f.draw(ctx, time, tuning.outlines && dangerous(f));
+  // no outlines in Survival: everything can eat you
+  const outlines = tuning.outlines && mode !== "survival";
+  for (const f of fish) f.draw(ctx, time, outlines && dangerous(f));
   player.draw(ctx, time);
-  hook.draw(ctx, time);
+  for (const h of hooks) h.draw(ctx, time);
   scenery.drawFront(ctx, time);
-  crab.draw(ctx); // on the front of the sand, so in front of the seaweed too
+  for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
 
   drawHud();
+  if (mode === "survival") drawLevelBanner();
 
   drawJoystick();
 
