@@ -113,7 +113,7 @@ const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigge
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
 // Sinking coins (Thomas, 2026-11-06). In Classic/Speed a coin drops in somewhere along the surface every
 // few seconds (COIN_EVERY), so you have to go and get it, up to COIN_DROPS a game. Growing sets how many
-// you can have had so far (coinAllowance), so sitting still runs dry after the first couple. (Tried
+// you can have had so far (coinAllowance), so none come until you eat and sitting still gets none. (Tried
 // and dropped the same day: growth alone, which gave whole games barely any coins, and one for every 3
 // fish eaten dropped right over you, which Thomas felt was too easy.) As a
 // bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
@@ -121,7 +121,6 @@ const CRAB_POINTS = 50; // for eating the crab in the frenzy
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
 const COIN_DROPS = 40; // the most a game drops, on every difficulty; worth more the harder it is (COIN_RATE)
 const COIN_EVERY = [4, 6]; // seconds between coins, while growing keeps up
-const COIN_HEADSTART = 2; // coins you can have before growing at all, so the first come right away
 const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
 const CHEST_LEVELS = [5, 10];
 const CHEST_COINS = 3;
@@ -1715,10 +1714,10 @@ function growthEffort(): number {
   return Math.min(1, Math.log(player.r / START_RADIUS) / Math.log(winRadius() / START_RADIUS));
 }
 
-/** How many sinking coins this game may have dropped by now: a couple to start, then more as you
- * grow, reaching COIN_DROPS at the win, so sitting still can't keep them coming. */
+/** How many sinking coins this game may have dropped by now: none until you eat (no free coins for
+ * starting and dying, Thomas), then more as you grow, reaching COIN_DROPS at the win. */
 function coinAllowance(): number {
-  return COIN_HEADSTART + Math.floor(growthEffort() * (COIN_DROPS - COIN_HEADSTART));
+  return Math.floor(growthEffort() * COIN_DROPS);
 }
 
 function between([lo, hi]: number[]): number {
