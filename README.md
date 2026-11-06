@@ -58,7 +58,7 @@ to the fishygame org.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.
 - Sinking coins: in Classic and Speed, up to 6 gold coins a game drop in from the surface, paid out
-  by growing, not by time: the k-th falls once the growth bar passes k/7 (at least 5 s apart), so
+  by growing, not by time: the k-th falls once you are k/7 of the way through the eating it takes to win (not the growth bar, which crawls early and races late; at least 5 s apart), so
   hanging around small earns nothing more. Each flutters down like a real coin in water, tumbling end
   over end and drifting side to side, then rocks to a stop on the sand, rests there 5 s (flashing,
   faster and faster, for the last 1.6 s) and vanishes. Eat one for 100 points ("+100") and 2 coins;

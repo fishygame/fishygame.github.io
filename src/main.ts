@@ -111,8 +111,9 @@ const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
 // Sinking coins (Thomas, 2026-11-06). A game has a fixed most it can pay, and growing pays it out,
-// not time: in Classic/Speed up to COIN_DROPS coins fall from the surface, the k-th once the growth
-// bar passes k/(COIN_DROPS + 1), so hanging around small earns nothing more. On top of that, as a
+// not time: in Classic/Speed up to COIN_DROPS coins fall from the surface, the k-th once you're
+// k/(COIN_DROPS + 1) of the way there by eating (see growthEffort), so hanging around small earns
+// nothing more. On top of that, as a
 // bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
 // Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
@@ -1574,7 +1575,7 @@ function sinkingCoins(): void {
   if (
     !survival &&
     coinsDropped < COIN_DROPS &&
-    progress() >= (coinsDropped + 1) / (COIN_DROPS + 1) &&
+    growthEffort() >= (coinsDropped + 1) / (COIN_DROPS + 1) &&
     time - lastDropAt >= COIN_GAP
   ) {
     sinking.push(new SinkingCoin(W * (0.1 + 0.8 * Math.random()), time));
@@ -1701,6 +1702,15 @@ function news(before: Ramp, after: Ramp): string {
 /** How far you are from starting size (0) to winning size (1). */
 function progress(): number {
   return Math.min(1, (player.r - START_RADIUS) / (winRadius() - START_RADIUS));
+}
+
+/** How far through the work of growing you are, 0 to 1. Each bite adds a share of your size, so the
+ * growth bar crawls at first and races at the end (on a big screen a fifth of the game's eating barely
+ * moves it); this counts in those shares instead, so it moves about evenly with the fish you eat.
+ * Coins are paid out on it: the first coin went by the bar at first, and Thomas got to 3,732 on Easy
+ * without seeing one (2026-11-06). */
+function growthEffort(): number {
+  return Math.min(1, Math.log(player.r / START_RADIUS) / Math.log(winRadius() / START_RADIUS));
 }
 
 function foodShare(): number {
