@@ -473,6 +473,7 @@ canvas {
   color: #fff;
 }
 
+#sync-note[hidden],
 #shop-nobody[hidden] {
   display: none;
 }
@@ -604,4 +605,12 @@ canvas {
   #menu #player-button {
     font-size: 15px;
   }
+}
+
+/* coins that haven't reached the server yet */
+#sync-note {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #ffd9a8;
 }

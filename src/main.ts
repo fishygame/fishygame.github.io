@@ -427,7 +427,7 @@ function endGame(next: State): void {
   const ended = endedAt;
   loadBoard()
     .then((scores) => {
-      if (scores && gameOver() && endedAt === ended && qualifies(scores, score, savedName())) openForm();
+      if (scores && gameOver() && endedAt === ended && qualifies(scores, score, wallet.name || savedName())) openForm();
     })
     .catch((err) => console.warn(err));
 }
@@ -767,6 +767,7 @@ const playerList = document.getElementById("player-list") as HTMLUListElement;
 const addForm = document.getElementById("add-player") as HTMLFormElement;
 const addName = document.getElementById("add-name") as HTMLInputElement;
 const addError = document.getElementById("add-error") as HTMLParagraphElement;
+const syncNote = document.getElementById("sync-note") as HTMLParagraphElement;
 let picked: string | null = null; // the item being tried on in the preview
 let shopOpenedAt = -Infinity;
 const previewFish = new Fish(0, 0, 0, 0, 46, 26);
@@ -911,6 +912,12 @@ function renderPlayers(): void {
     li.append(pick, remove);
     playerList.append(li);
   }
+  // anyone whose coins haven't reached the server lately (they're safe here, and it keeps trying)
+  const stuck = wallet.players().filter((p) => p.syncError);
+  syncNote.hidden = !stuck.length;
+  syncNote.textContent = stuck.length
+    ? `Couldn't save ${stuck.map((p) => p.name).join(" and ")}'s coins to the server yet (${stuck[0].syncError}). They're safe on this device, and it keeps trying.`
+    : "";
   // and Guest, always there, so nobody has to add a name just to play
   const li = document.createElement("li");
   const guest = document.createElement("button");
@@ -1049,7 +1056,7 @@ function seedPlayer(): void {
     const name = savedName();
     const done = () => localStorage.setItem(SEEDED_KEY, "1");
     if (!name || isGuestName(name)) return done();
-    wallet.addPlayer(name).then(done, (err) => console.warn(err));
+    wallet.addPlayer(name, "ifGuest").then(done, (err) => console.warn(err));
   } catch {
     // storage blocked: Guest it is
   }
@@ -1096,7 +1103,7 @@ form.addEventListener("submit", async (e) => {
     }
     // a Guest on a device with no players yet (a kid's own computer) becomes that name from now on;
     // with players already here (a shared iPad), the menu's who's playing is left alone
-    if (!wallet.name && !wallet.players().length && !isGuestName(name)) wallet.addPlayer(name).catch((err) => console.warn(err));
+    if (!wallet.name && !wallet.players().length && !isGuestName(name)) wallet.addPlayer(name, "ifGuest").catch((err) => console.warn(err));
     closeForm();
   } catch (err) {
     formError.textContent = (err as Error).message;

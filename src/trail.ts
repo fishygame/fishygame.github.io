@@ -64,7 +64,7 @@ export class Trail {
       ctx.globalAlpha = Math.min(1, (1 - t) * 1.6);
       if (kind === "bubbles") bubble(ctx, b);
       else if (kind === "sparkles") sparkle(ctx, b, t, time);
-      else heart(ctx, b, t);
+      else if (kind === "hearts") heart(ctx, b, t);
     }
     ctx.restore();
   }

@@ -287,7 +287,7 @@ export class Fish {
   /** A color on this fish, as hsl from the plain fish's saturation and lightness, shifted for its
    * look. `hue` overrides the hue (a rainbow's cycling fins). */
   private tone(s: number, l: number, a = 1, hue?: number): string {
-    const t = LOOK_TONE[this.look];
+    const t = LOOK_TONE[this.look] ?? LOOK_TONE.plain; // an unknown look draws plain, never crashes
     const h = hue ?? t.h ?? this.hue;
     return `hsl(${h} ${Math.min(100, s * t.s)}% ${Math.min(95, l * t.l + t.dl)}% / ${a})`;
   }

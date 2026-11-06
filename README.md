@@ -148,11 +148,18 @@ aws lambda update-function-code --function-name fishy-high-scores --zip-file fil
 
 The same Lambda keeps the shop's wallets, item `wallet#<username in lower case>`: `earned` (all
 coins ever), `owned`, `equipped`, `equippedAt` and `seen` (the last 500 game ids). GET
-`?wallet=<name>` reads one; POST `{ wallet, games: [{ id, coins }], owned, equipped, equippedAt }`
-merges a device's changes and returns the result. The merge only adds: each game id pays once
-(at most 200 coins), owned is a union, and the newest outfit wins; nothing new means no write.
-The game works out the balance (earned minus the prices of what's owned). Wallet syncs don't use
-the score cooldown. Deploy the Lambda before a game that syncs wallets.
+`?wallet=<name>` reads one; POST `{ wallet, games: [{ id, coins }], owned, equipped, outfitChanged }`
+merges a device's changes and returns the result. The merge only adds: each game id pays once (at
+most 200 coins an entry; the game splits a bigger game into several), owned is a union of real
+shop items, and an outfit sent with `outfitChanged` replaces the stored one, timed by the server's
+clock. Unknown items, repeats and bad game entries are dropped, not rejected, so one bad entry can't
+block a player's syncing. Nothing new means no write, and each IP gets 30 wallet writes a minute
+(row `wip#<ip>`, separate from the score cooldown). The game works out the balance (earned minus the
+prices of what's owned). **The Lambda's `CATALOG` must list the same item ids as `ITEMS` in
+`src/shop.ts`: when adding an item, deploy the Lambda first.** The game also ignores any item it
+doesn't know, so an old page never crashes on a newer item. If a player's coins can't reach the
+server, the Who's playing? screen says so and the game retries every 30 seconds. Deploy the Lambda
+before a game that syncs wallets.
 
 To test the Lambda without touching the real boards or wallets: `node server/dev/test.mjs` runs
 its checks against an in-memory table, and `node server/dev/serve.mjs` serves it on

@@ -26,7 +26,7 @@ export function drawHat(ctx: CanvasRenderingContext2D, hat: Hat, r: number, time
   else if (hat === "bow") bow(ctx, u);
   else if (hat === "pirate") pirate(ctx, u);
   else if (hat === "tophat") topHat(ctx, u);
-  else crown(ctx, u, time);
+  else if (hat === "crown") crown(ctx, u, time); // and an unknown hat draws nothing
   ctx.restore();
 }
 

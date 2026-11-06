@@ -15,11 +15,15 @@
 // Coin shop wallets (2026-11-06), one per username, item `wallet#<name, lower case>`:
 //   GET  ?wallet=<name> -> { name, earned, owned, equipped, equippedAt, exists }
 //   POST { wallet: name, games: [{ id, coins }], owned: [ids], equipped: { look, hat, trail },
-//        equippedAt } -> the same, after merging
-// The merge only ever adds: each game's coins count once (by id), owned items are a union, and the
-// newest outfit wins. The game works out the balance (earned minus the prices of what's owned), so
-// prices live only in the game. There's no password: it's a family game, and a username is as
-// public as a name on the boards.
+//        outfitChanged } -> the same, after merging
+// The merge only ever adds: each game's coins count once (by id, at most 200 per entry; a bad entry
+// is dropped, not allowed to block the rest), owned items are a union of real shop items (anything
+// else, and repeats, are dropped, so nobody can bury a wallet in junk), and an outfit change from a
+// device replaces the stored one, timed by this server's clock (a device with a wrong clock can't
+// win every time). The game works out the balance (earned minus the prices of what's owned), so
+// prices live only in the game, but the item ids here must match its ITEMS (src/shop.ts): when
+// adding an item, deploy the Lambda first. There's no password: it's a family game, and a username
+// is as public as a name on the boards. Each IP gets WALLET_WRITES wallet writes a minute.
 // Leaving out the mode or difficulty means Classic on Medium, the original game, so older copies of
 // the page still work. Names are checked here, not in the game, so the filter can't be skipped by
 // editing the page.
@@ -40,13 +44,19 @@ const COOLDOWN = 10; // seconds between submissions from the same IP
 const MODES = ["classic", "speed", "survival"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const ENDS = ["won", "shark", "fish", "hook", "crab"]; // you won, or what got you
-const SLOTS = ["look", "hat", "trail"];
-const ITEM_ID = /^[a-z0-9-]{1,20}$/;
+// The shop's items by slot; must match ITEMS in src/shop.ts
+const CATALOG = {
+  look: ["clown", "spots", "silver", "gold", "midnight", "rainbow"],
+  hat: ["party", "bow", "shades", "pirate", "tophat", "crown"],
+  trail: ["bubbles", "sparkles", "hearts"],
+};
+const ITEMS = new Set(Object.values(CATALOG).flat());
 const GAME_ID = /^[a-z0-9-]{6,40}$/;
 const MAX_GAMES = 50; // per request
-const MAX_GAME_COINS = 200; // far beyond a real game (a win on Hard with lots of bait is about 60)
-const MAX_OWNED = 60;
+const MAX_LIST = 200; // longest owned list a request may send (the shop has 15 items)
+const MAX_GAME_COINS = 200; // per entry; the game splits a bigger game into several
 const SEEN = 500; // game ids remembered per wallet, so a retried sync can't pay twice
+const WALLET_WRITES = 30; // per IP per minute: plenty for a family on one Wi-Fi, little for a flood
 
 // Matched anywhere in the name, after undoing l33t-speak and repeated letters.
 const BLOCKED_ANYWHERE = [
@@ -242,12 +252,27 @@ function walletName(raw) {
   return { name, pk: `wallet#${name.toLowerCase()}` };
 }
 
+/** Only real shop items, each once. */
+function realItems(ids) {
+  return [...new Set((Array.isArray(ids) ? ids : []).filter((id) => ITEMS.has(id)))];
+}
+
+/** Only a real item in each slot. */
+function realOutfit(outfit) {
+  const clean = {};
+  if (!outfit || typeof outfit !== "object" || Array.isArray(outfit)) return clean;
+  for (const [slot, ids] of Object.entries(CATALOG)) {
+    if (ids.includes(outfit[slot])) clean[slot] = outfit[slot];
+  }
+  return clean;
+}
+
 function publicWallet(item, name) {
   return {
     name: item?.name ?? name,
     earned: item?.earned ?? 0,
-    owned: item?.owned ?? [],
-    equipped: item?.equipped ?? {},
+    owned: realItems(item?.owned),
+    equipped: realOutfit(item?.equipped),
     equippedAt: item?.equippedAt ?? 0,
     exists: !!item,
   };
@@ -260,32 +285,55 @@ async function getWallet(query) {
   return json(200, publicWallet(Item, who.name));
 }
 
-/** The request's wallet changes, checked, or null if anything's off. */
+/** The request's wallet changes, cleaned up: bad games and unknown items are dropped rather than
+ * failing the whole request (one bad entry would otherwise block a player's syncing for good). Null
+ * only if the request isn't shaped like a wallet sync at all. */
 function walletChanges(body) {
-  const { games = [], owned = [], equipped = {}, equippedAt = 0 } = body;
+  const { games = [], owned = [], equipped = {}, outfitChanged = false } = body;
   if (!Array.isArray(games) || games.length > MAX_GAMES) return null;
-  for (const g of games) {
-    if (!g || typeof g.id !== "string" || !GAME_ID.test(g.id)) return null;
-    if (!Number.isInteger(g.coins) || g.coins < 0 || g.coins > MAX_GAME_COINS) return null;
-  }
-  if (!Array.isArray(owned) || owned.length > MAX_OWNED || !owned.every((id) => typeof id === "string" && ITEM_ID.test(id))) {
-    return null;
-  }
+  if (!Array.isArray(owned) || owned.length > MAX_LIST) return null;
   if (!equipped || typeof equipped !== "object" || Array.isArray(equipped)) return null;
-  for (const [slot, id] of Object.entries(equipped)) {
-    if (!SLOTS.includes(slot) || typeof id !== "string" || !ITEM_ID.test(id)) return null;
+  const clean = games
+    .filter((g) => g && typeof g.id === "string" && GAME_ID.test(g.id) && Number.isFinite(g.coins) && g.coins >= 1)
+    .map((g) => ({ id: g.id, coins: Math.min(MAX_GAME_COINS, Math.floor(g.coins)) }));
+  return { games: clean, owned: realItems(owned), equipped: realOutfit(equipped), outfitChanged: outfitChanged === true };
+}
+
+/** Rate limit for wallet writes, per IP: a count per minute in its own row (`wip#`, separate from
+ * the score cooldown's `ip#`). False once the minute's writes are used up. */
+async function claimWalletWrite(ip) {
+  const pk = `wip#${ip}`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const now = Math.floor(Date.now() / 1000);
+    const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk } }));
+    const fresh = !Item || Item.expires <= now;
+    if (!fresh && Item.count >= WALLET_WRITES) return false;
+    const version = Item?.version ?? 0;
+    try {
+      await db.send(
+        new PutCommand({
+          TableName: TABLE,
+          Item: { pk, count: fresh ? 1 : Item.count + 1, expires: fresh ? now + 60 : Item.expires, version: version + 1 },
+          ConditionExpression: "attribute_not_exists(pk) OR version = :v",
+          ExpressionAttributeValues: { ":v": version },
+        }),
+      );
+      return true;
+    } catch (err) {
+      if (err.name !== "ConditionalCheckFailedException") throw err;
+    }
   }
-  if (!Number.isInteger(equippedAt) || equippedAt < 0) return null;
-  return { games, owned, equipped, equippedAt };
+  return false;
 }
 
 /** Merge a device's games, purchases and outfit into its wallet: read-modify-write with a version
  * check, retrying if two devices sync at once. Writes nothing if nothing changed. */
-async function syncWallet(body) {
+async function syncWallet(body, event) {
   const who = walletName(body.wallet);
   if (who.error) return who.error;
   const changes = walletChanges(body);
   if (!changes) return json(400, { error: "Bad request" });
+  let claimed = false;
   for (let attempt = 0; attempt < 5; attempt++) {
     const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk: who.pk } }));
     const cur = Item ?? { pk: who.pk, name: who.name, earned: 0, owned: [], seen: [], equipped: {}, equippedAt: 0, version: 0 };
@@ -296,18 +344,25 @@ async function syncWallet(body) {
       earned += g.coins;
       seen.push(g.id);
     }
-    const owned = [...cur.owned, ...changes.owned.filter((id) => !cur.owned.includes(id))].slice(0, MAX_OWNED);
-    const newer = changes.equippedAt > cur.equippedAt;
+    const had = realItems(cur.owned);
+    const owned = realItems([...had, ...changes.owned]);
+    const was = realOutfit(cur.equipped);
+    const outfit = changes.outfitChanged && JSON.stringify(changes.equipped) !== JSON.stringify(was);
     const next = {
       ...cur,
       earned,
       owned,
       seen: seen.slice(-SEEN),
-      equipped: newer ? changes.equipped : cur.equipped,
-      equippedAt: newer ? changes.equippedAt : cur.equippedAt,
+      equipped: outfit ? changes.equipped : was,
+      equippedAt: outfit ? Date.now() : cur.equippedAt,
     };
-    const same = Item && earned === cur.earned && owned.length === cur.owned.length && !newer;
-    if (same) return json(200, publicWallet(cur, who.name));
+    if (Item && earned === cur.earned && owned.length === had.length && !outfit) return json(200, publicWallet(cur, who.name));
+    if (!claimed) {
+      if (!(await claimWalletWrite(event.requestContext?.http?.sourceIp ?? "unknown"))) {
+        return json(429, { error: "Slow down a little and try again" });
+      }
+      claimed = true;
+    }
     try {
       await db.send(
         new PutCommand({
@@ -347,7 +402,7 @@ export const handler = async (event) => {
   if (method === "POST") {
     const body = parseBody(event);
     if (!body || typeof body !== "object") return json(400, { error: "Bad request" });
-    return body.wallet !== undefined ? syncWallet(body) : submit(body, event);
+    return body.wallet !== undefined ? syncWallet(body, event) : submit(body, event);
   }
   return json(405, { error: "Method not allowed" });
 };
