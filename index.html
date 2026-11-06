@@ -40,12 +40,17 @@
       <!-- the coin shop, called the Treasure Chest: looks, hats and trails for your fish (cosmetics only) -->
       <div class="screen" data-screen="shop" hidden>
         <h2>The Treasure Chest</h2>
-        <p class="wallet-line"><span id="shop-who"></span><span class="coin"></span><b id="shop-balance">0</b> coins</p>
-        <p id="shop-nobody" class="sync-help" hidden>You're playing as a Guest. Add your name on the main menu to collect coins and buy things.</p>
-        <canvas id="shop-preview"></canvas>
-        <p id="shop-picked"></p>
-        <button id="shop-action" data-shop="action">Pick something to try it on</button>
-        <div id="shop-items"></div>
+        <div class="shop-body">
+          <!-- stays in view while the items scroll (beside them on a wide screen) -->
+          <div class="shop-top">
+            <p class="wallet-line"><span id="shop-who"></span><span class="coin"></span><b id="shop-balance">0</b> coins</p>
+            <p id="shop-nobody" class="sync-help" hidden>You're playing as a Guest. Add your name on the main menu to collect coins and buy things.</p>
+            <canvas id="shop-preview"></canvas>
+            <p id="shop-picked"></p>
+            <button id="shop-action" data-shop="action">Pick something to try it on</button>
+          </div>
+          <div id="shop-items"></div>
+        </div>
         <button data-go="main">Back</button>
       </div>
       <!-- who's playing on this device: coins go to them (a family can share an iPad) -->

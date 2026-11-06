@@ -1,5 +1,5 @@
 // The Lambda on http://localhost:8787 with an in-memory table, to try the game against it:
-//   node server/dev/serve.mjs
+//   node server/dev/serve.mjs   (PORT=8788 for a second one)
 // then, in another terminal, a dev server that uses it instead of the real Lambda (PowerShell):
 //   $env:VITE_SCORE_API = "http://localhost:8787/"; npx vite --port 5174
 import http from "node:http";
@@ -21,4 +21,4 @@ http
     });
     res.writeHead(r.statusCode, { ...cors, ...r.headers }).end(r.body);
   })
-  .listen(8787, () => console.log("listening 8787"));
+  .listen(Number(process.env.PORT) || 8787, () => console.log(`listening ${Number(process.env.PORT) || 8787}`));

@@ -10,10 +10,10 @@ import { drawChestBack, drawChestFront } from "./chest";
 import {
   BAIT_COINS,
   COIN_RATE,
+  type Equipped,
   GAME_COINS,
   type Hat,
   ITEMS,
-  LEVEL_COINS,
   type Look,
   PROGRESS_COINS,
   SLOT_LABEL,
@@ -22,6 +22,8 @@ import {
   WIN_COINS,
   Wallet,
   isGuestName,
+  levelCoins,
+  survivalCoins,
 } from "./shop";
 import {
   BOARD_TITLE,
@@ -432,12 +434,17 @@ function endGame(next: State): void {
     .catch((err) => console.warn(err));
 }
 
-/** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew (or the level you reached in
- * Survival), winning and bait, times the difficulty's rate. */
+/** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew,
+ * winning and bait, times the difficulty's rate; in Survival, for each level got through. */
 function gameCoins(): number {
-  if (mode === "survival") return level * LEVEL_COINS;
+  if (mode === "survival") return survivalCoins(level);
   const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + baitsEaten * BAIT_COINS;
   return Math.round(raw * COIN_RATE[difficulty]);
+}
+
+/** "+1 coin", "+6 coins". */
+function coinWord(n: number): string {
+  return `+${n} coin${n === 1 ? "" : "s"}`;
 }
 
 /** Bait's coins on this difficulty. */
@@ -463,6 +470,13 @@ const menu = document.getElementById("menu") as HTMLDivElement;
 const menuScores = document.getElementById("menu-scores") as HTMLOListElement;
 const toMenu = document.getElementById("to-menu") as HTMLButtonElement;
 document.getElementById("scores-title")!.textContent = BOARD_TITLE;
+// a copy pointed at a local Lambda (for trying things out) says so, so nobody takes its scores for real
+if (import.meta.env.VITE_SCORE_API) {
+  const tag = document.createElement("div");
+  tag.id = "test-copy";
+  tag.textContent = "Test copy: scores and coins here aren't real";
+  document.body.append(tag);
+}
 document.getElementById("controls-help")!.textContent = touchUI
   ? "Drag anywhere on the screen to swim. The buttons in the top-right corner pause, skip to the next song and mute."
   : "Swim with the arrow keys or WASD. Space pauses, N skips to the next song, M mutes.";
@@ -486,6 +500,8 @@ function showMenu(): void {
 
 function showScreen(name: string): void {
   for (const s of menu.querySelectorAll<HTMLElement>(".screen")) s.hidden = s.dataset.screen !== name;
+  menu.classList.toggle("wide", name === "shop"); // a wider window for the shop on a big screen
+  hideFishZoom();
   if (name === "scores") loadMenuScores();
   if (name === "players") {
     addError.textContent = "";
@@ -712,10 +728,83 @@ function boardFish(entry: Entry): HTMLCanvasElement {
   f.look = (known("look") as Look | null) ?? "plain";
   f.hat = known("hat") as Hat | null;
   f.draw(g, 0);
+  c.addEventListener("pointerenter", (e) => {
+    if (e.pointerType === "mouse") showFishZoom(c, entry, outfit);
+  });
+  c.addEventListener("pointerleave", (e) => {
+    if (e.pointerType === "mouse") hideFishZoom();
+  });
+  c.addEventListener("click", () => (zoomOn?.icon === c ? hideFishZoom() : showFishZoom(c, entry, outfit)));
   return c;
 }
 
+// ---- a board fish, big ----
+// Point at (or tap) a fish on the boards and it shows big, outfit, trail and all.
+const fishZoom = document.createElement("canvas");
+fishZoom.id = "fish-zoom";
+fishZoom.hidden = true;
+document.body.append(fishZoom);
+const zoomFish = new Fish(0, 0, 0, 0, 30, 26);
+const zoomTrail = new Trail();
+let zoomOn: { icon: HTMLElement; name: string; trail: TrailKind | null } | null = null;
+
+function showFishZoom(icon: HTMLElement, entry: Entry, outfit: Equipped): void {
+  const known = (slot: Slot) => {
+    const id = outfit[slot];
+    return id && ITEMS.some((i) => i.id === id && i.slot === slot) ? id : null;
+  };
+  zoomFish.look = (known("look") as Look | null) ?? "plain";
+  zoomFish.hat = known("hat") as Hat | null;
+  zoomTrail.clear();
+  zoomOn = { icon, name: entry.name, trail: known("trail") as TrailKind | null };
+  // out to the left of the board where there's room (so the row stays readable), else to the right,
+  // kept on the screen
+  const r = icon.getBoundingClientRect();
+  const [w, h] = [194, 134];
+  const board = menu.getBoundingClientRect();
+  const left = board.left - 12 - w >= 8 ? board.left - 12 - w : Math.min(window.innerWidth - 8 - w, r.right + 8);
+  fishZoom.style.left = `${left}px`;
+  fishZoom.style.top = `${Math.min(window.innerHeight - h - 8, Math.max(8, r.top + r.height / 2 - h / 2))}px`;
+  fishZoom.hidden = false;
+}
+
+function hideFishZoom(): void {
+  zoomOn = null;
+  fishZoom.hidden = true;
+}
+
+// a tap anywhere else puts it away (on a touch screen there's no pointing away)
+document.addEventListener("pointerdown", (e) => {
+  if (zoomOn && !(e.target as HTMLElement).classList?.contains("fish-icon")) hideFishZoom();
+});
+
+function drawFishZoom(dt: number): void {
+  if (!zoomOn) return;
+  if (!zoomOn.icon.isConnected) return hideFishZoom(); // the board changed under it
+  const dpr = window.devicePixelRatio || 1;
+  const [w, h] = [190, 130];
+  if (fishZoom.width !== w * dpr) {
+    fishZoom.width = w * dpr;
+    fishZoom.height = h * dpr;
+  }
+  const g = fishZoom.getContext("2d") as CanvasRenderingContext2D;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  zoomFish.x = w / 2 + 14;
+  zoomFish.y = 58 + Math.sin(time * 2) * 3;
+  zoomTrail.update(dt, zoomOn.trail, zoomFish.x, zoomFish.y, 1, zoomFish.r, 200, -70);
+  zoomTrail.draw(g, zoomOn.trail, time);
+  zoomFish.draw(g, time);
+  g.font = "bold 16px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.fillStyle = "#fff";
+  g.shadowColor = "rgba(0, 0, 0, 0.6)";
+  g.shadowBlur = 4;
+  g.fillText(zoomOn.name, w / 2, h - 12);
+}
+
 function renderMenuScores(scores: Entry[]): void {
+  hideFishZoom();
   menuScores.classList.remove("stale");
   menuScores.innerHTML = "";
   scores.forEach((entry, i) => {
@@ -1722,6 +1811,12 @@ function drawLevelBanner(): void {
   ctx.font = "22px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
   ctx.fillText(levelNews, W / 2, H * 0.3 + 44, W - 32);
+  // what getting through the last level paid (a named player only; Guests earn nothing)
+  if (level > 1 && wallet.name) {
+    ctx.font = "bold 20px system-ui, sans-serif";
+    ctx.fillStyle = "#fff1a8";
+    ctx.fillText(coinWord(levelCoins(level - 1)), W / 2, H * 0.3 + 78);
+  }
   ctx.restore();
 }
 
@@ -1984,7 +2079,7 @@ function draw(): void {
   drawJoystick();
 
   // a Guest earns nothing, but hears what adding a name would get them
-  const coinLine = !coinsEarned ? "" : wallet.name ? `+${coinsEarned} coins · ` : "Add your name to collect coins! · ";
+  const coinLine = !coinsEarned ? "" : wallet.name ? `${coinWord(coinsEarned)} · ` : "Add your name to collect coins! · ";
   const again = `${coinLine}${touchUI ? "Tap" : "Click or press Space"}`;
   if (state === "dead") drawOverlay(hooked ? "You got caught!" : pinched ? "You got pinched!" : "You got eaten!", `${again} to try again`, true);
   if (paused) drawOverlay("Paused", `${touchUI ? "Tap" : "Press Space"} to keep swimming`);
@@ -2001,6 +2096,7 @@ function frame(now: number): void {
   update(dt);
   draw();
   drawShopPreview(dt);
+  drawFishZoom(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

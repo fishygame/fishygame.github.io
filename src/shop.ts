@@ -67,7 +67,20 @@ export const GAME_COINS = 1; // just for playing, so even a game that ends at on
 export const PROGRESS_COINS = 10; // for filling the growth bar (Classic and Speed): 1 per tenth
 export const WIN_COINS = 6;
 export const BAIT_COINS = 6; // per clump of bonus bait; even, so Easy's half is a whole number
-export const LEVEL_COINS = 2; // per Survival level reached
+// Survival pays for each level you get through, more the deeper it gets (Thomas, 2026-11-06), so
+// farming the easy early levels pays least: 1 a level for 1-3, 2 for 4-6, 4 for 7-9, 6 for 10-12,
+// then 8. Getting through 10 levels (Thomas's best, dying on level 11) pays 1 + 27 = 28, about what
+// the same few minutes of Classic on Medium pay.
+export function levelCoins(level: number): number {
+  return level <= 3 ? 1 : level <= 6 ? 2 : level <= 9 ? 4 : level <= 12 ? 6 : 8;
+}
+
+/** A Survival game's coins, ending on `level`: the coin for playing, plus every level got through. */
+export function survivalCoins(level: number): number {
+  let coins = GAME_COINS;
+  for (let l = 1; l < level; l++) coins += levelCoins(l);
+  return coins;
+}
 
 export type Equipped = Partial<Record<Slot, string>>;
 
