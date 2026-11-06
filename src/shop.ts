@@ -32,41 +32,45 @@ export interface Item {
 // cheapest first; 9 looks, 9 hats and 6 trails fill the shop's rows of 3. The Lambda's CATALOG
 // must list the same ids: deploy it first when adding one.
 export const ITEMS: Item[] = [
-  { id: "clown", slot: "look", name: "Clownfish", price: 100 },
-  { id: "spots", slot: "look", name: "Spotted", price: 100 },
-  { id: "tiger", slot: "look", name: "Tiger", price: 150 },
-  { id: "pizza", slot: "look", name: "Pizza", price: 200 },
-  { id: "silver", slot: "look", name: "Silver", price: 200 },
-  { id: "camo", slot: "look", name: "Camo", price: 250 },
-  { id: "gold", slot: "look", name: "Gold", price: 400 },
-  { id: "midnight", slot: "look", name: "Midnight", price: 400 },
-  { id: "rainbow", slot: "look", name: "Rainbow", price: 1000 },
-  { id: "party", slot: "hat", name: "Party hat", price: 75 },
-  { id: "bow", slot: "hat", name: "Bow", price: 75 },
-  { id: "shades", slot: "hat", name: "Sunglasses", price: 150 },
-  { id: "viking", slot: "hat", name: "Viking horns", price: 200 },
-  { id: "pirate", slot: "hat", name: "Pirate hat", price: 250 },
-  { id: "tophat", slot: "hat", name: "Top hat", price: 250 },
-  { id: "diving", slot: "hat", name: "Diving helmet", price: 300 },
-  { id: "propeller", slot: "hat", name: "Propeller cap", price: 500 },
-  { id: "crown", slot: "hat", name: "Crown", price: 600 },
-  { id: "bubbles", slot: "trail", name: "Bubbles", price: 150 },
-  { id: "gas", slot: "trail", name: "Gas", price: 150 },
-  { id: "notes", slot: "trail", name: "Music notes", price: 200 },
-  { id: "stars", slot: "trail", name: "Stars", price: 250 },
-  { id: "sparkles", slot: "trail", name: "Sparkles", price: 300 },
-  { id: "hearts", slot: "trail", name: "Hearts", price: 300 },
+  { id: "clown", slot: "look", name: "Clownfish", price: 200 },
+  { id: "spots", slot: "look", name: "Spotted", price: 200 },
+  { id: "tiger", slot: "look", name: "Tiger", price: 300 },
+  { id: "pizza", slot: "look", name: "Pizza", price: 400 },
+  { id: "silver", slot: "look", name: "Silver", price: 400 },
+  { id: "camo", slot: "look", name: "Camo", price: 500 },
+  { id: "gold", slot: "look", name: "Gold", price: 800 },
+  { id: "midnight", slot: "look", name: "Midnight", price: 800 },
+  { id: "rainbow", slot: "look", name: "Rainbow", price: 2000 },
+  { id: "party", slot: "hat", name: "Party hat", price: 150 },
+  { id: "bow", slot: "hat", name: "Bow", price: 150 },
+  { id: "shades", slot: "hat", name: "Sunglasses", price: 300 },
+  { id: "viking", slot: "hat", name: "Viking horns", price: 400 },
+  { id: "pirate", slot: "hat", name: "Pirate hat", price: 500 },
+  { id: "tophat", slot: "hat", name: "Top hat", price: 500 },
+  { id: "diving", slot: "hat", name: "Diving helmet", price: 600 },
+  { id: "propeller", slot: "hat", name: "Propeller cap", price: 1000 },
+  { id: "crown", slot: "hat", name: "Crown", price: 1200 },
+  { id: "bubbles", slot: "trail", name: "Bubbles", price: 300 },
+  { id: "gas", slot: "trail", name: "Gas", price: 300 },
+  { id: "notes", slot: "trail", name: "Music notes", price: 400 },
+  { id: "stars", slot: "trail", name: "Stars", price: 500 },
+  { id: "sparkles", slot: "trail", name: "Sparkles", price: 600 },
+  { id: "hearts", slot: "trail", name: "Hearts", price: 600 },
 ];
 
 export const SLOT_LABEL: Record<Slot, string> = { look: "Looks", hat: "Hats", trail: "Trails" };
 
-// What a game pays, before the difficulty. Harder pays more (Thomas, 2026-11-06), so nobody farms
-// Easy; Survival has one difficulty and pays x1.
-export const COIN_RATE: Record<Difficulty, number> = { easy: 0.5, medium: 1, hard: 2 };
+// What a game pays, before the difficulty, times its rate (Thomas, 2026-11-06): every difficulty
+// drops the same coins, so Easy is as much fun, but each is worth more the harder it is. A Hard game
+// runs about three times as long as an Easy one, so a great player earns about the same per minute
+// on any of them (about 10 a minute; the shop math is in the README). Survival counts as Medium for
+// the coins you catch; its levels pay by levelCoins below.
+export const COIN_RATE: Record<Difficulty, number> = { easy: 1, medium: 2, hard: 3 };
+export const SURVIVAL_RATE = 2;
 export const GAME_COINS = 1; // just for playing, so even a game that ends at once earns something
 export const PROGRESS_COINS = 10; // for filling the growth bar (Classic and Speed): 1 per tenth
 export const WIN_COINS = 6;
-export const COIN_VALUE = 2; // per sinking coin caught; even, so Easy's half is a whole number
+export const COIN_VALUE = 1; // per coin caught (falling or from the chest), times the rate
 // Survival pays for each level you get through, more the deeper it gets (Thomas, 2026-11-06), so
 // farming the easy early levels pays least: 1 a level for 1-3, 2 for 4-6, 4 for 7-9, 6 for 10-12,
 // then 8. Getting through 10 levels (Thomas's best, dying on level 11) pays 27, about what

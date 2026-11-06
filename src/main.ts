@@ -10,6 +10,7 @@ import { drawChestBack, drawChestFront } from "./chest";
 import {
   COIN_RATE,
   COIN_VALUE,
+  SURVIVAL_RATE,
   type Equipped,
   GAME_COINS,
   type Hat,
@@ -117,7 +118,7 @@ const CRAB_POINTS = 50; // for eating the crab in the frenzy
 // bonus, the treasure chest on the sand bursts open twice (at CHEST_AT growth, or CHEST_LEVELS in
 // Survival), throwing out CHEST_COINS each. The shop math these numbers come from is in the README.
 const COIN_POINTS = 100; // Classic/Speed (in Speed it also keeps the combo going); Survival pays no points for them
-const COIN_DROPS = 6;
+const COIN_DROPS = 10; // on every difficulty; they're worth more the harder it is (COIN_RATE)
 const COIN_GAP = 5; // seconds at least between two dropped coins, so a growth spurt doesn't rain them
 const CHEST_AT = [0.5, 0.8]; // the first as the frenzy starts
 const CHEST_LEVELS = [5, 10];
@@ -449,12 +450,12 @@ function endGame(next: State): void {
     .catch((err) => console.warn(err));
 }
 
-/** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew,
+/** What the game that just ended pays: a coin for playing, for how far you grew,
  * winning and the sinking coins caught, times the difficulty's rate; in Survival, for each level got through. */
 function gameCoins(): number {
-  if (mode === "survival") return survivalCoins(level) + coinsCaught * COIN_VALUE;
+  if (mode === "survival") return survivalCoins(level) + coinsCaught * caughtCoinValue();
   const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + coinsCaught * COIN_VALUE;
-  return Math.round(raw * COIN_RATE[difficulty]);
+  return raw * COIN_RATE[difficulty];
 }
 
 /** "+1 coin", "+6 coins". */
@@ -464,7 +465,7 @@ function coinWord(n: number): string {
 
 /** What a sinking coin pays on this difficulty. */
 function caughtCoinValue(): number {
-  return Math.round(COIN_VALUE * COIN_RATE[difficulty]);
+  return COIN_VALUE * (mode === "survival" ? SURVIVAL_RATE : COIN_RATE[difficulty]);
 }
 
 /** Seconds of play so far, not counting pauses; it stops when the game ends. */
@@ -906,7 +907,7 @@ for (const b of menu.querySelectorAll<HTMLButtonElement>('[data-screen="main"] .
   const rate = COIN_RATE[b.dataset.value as Difficulty];
   const span = document.createElement("span");
   span.className = "rate";
-  span.textContent = `coins x${rate === 0.5 ? "\u00BD" : rate}`;
+  span.textContent = `coins x${rate}`;
   b.append(span);
 }
 addName.maxLength = NAME_MAX;
