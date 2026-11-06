@@ -312,6 +312,29 @@ export class Sound {
     vib.stop(t + len + 0.05);
   }
 
+  /** Bonus bait: a bright little ding-ding going up, with a sparkle on top. */
+  bonus(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [
+      [0, 988, 0.35], // B5
+      [0.08, 1319, 0.35], // E6
+      [0.16, 1976, 0.18], // B6, the sparkle
+    ].forEach(([at, freq, level]) => {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(level, t + at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + at + 0.35);
+      osc.connect(g).connect(this.master);
+      osc.start(t + at);
+      osc.stop(t + at + 0.4);
+    });
+  }
+
   private noiseBurst(
     dest: AudioNode,
     t: number,

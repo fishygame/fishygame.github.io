@@ -4,6 +4,7 @@ import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { HOOK_TIMING, Hook } from "./hook";
 import { CRAB_TIMING, Crab } from "./crab";
+import { Bait } from "./bait";
 import {
   BOARD_TITLE,
   type Boards,
@@ -90,6 +91,11 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
+// bonus bait (not in Survival): golden fish food sinking from the surface now and then
+const BAIT_POINTS = 300; // about a fish 85% your size in Classic; in Speed it also keeps the combo going
+const BAIT_FIRST = [15, 25]; // seconds into a game before the first one
+const BAIT_EVERY = [40, 60]; // seconds between the rest
+const POPUP_TIME = 1.2; // how long the "+300" floats up
 // Fish colors run from green through blue to pink, well clear of the player's orange (hue 26).
 const FISH_HUES = [90, 330];
 const PLAYER_SPEED_SMALL = 320; // top speed when you start out tiny...
@@ -317,6 +323,9 @@ let levelNews = ""; // what the new level brings, for the banner
 let levelUpAt = -Infinity;
 let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
+let baits: Bait[] = [];
+let baitTimer = 0;
+let popups: { x: number; y: number; text: string; at: number }[] = [];
 
 function loadChoice<T extends string>(key: string, options: T[], fallback: T): T {
   try {
@@ -355,6 +364,9 @@ function reset(): void {
   startedAt = time;
   combo = 0;
   timeBonus = 0;
+  baits = [];
+  popups = [];
+  baitTimer = between(BAIT_FIRST);
   myRanks = { week: -1, all: -1, players: -1 };
   syncUI();
 }
@@ -912,6 +924,7 @@ function update(dt: number): void {
     h.update(dt);
   }
   for (const c of crabs) c.update(dt);
+  baits = baits.filter((b) => b.update(dt, time, scenery.sandTop(b.x)));
   if (combo && time - lastBite > COMBO_WINDOW) combo = 0;
 
   for (const b of bubbles) {
@@ -1046,6 +1059,7 @@ function update(dt: number): void {
       return;
     }
   }
+  if (mode !== "survival") bonusBait(dt);
 
   for (let i = fish.length - 1; i >= 0; i--) {
     const f = fish[i];
@@ -1074,6 +1088,50 @@ function update(dt: number): void {
       }
     }
   }
+}
+
+function between([lo, hi]: number[]): number {
+  return lo + Math.random() * (hi - lo);
+}
+
+/** Classic and Speed: drop golden fish food now and then, and pay a bonus for eating it. */
+function bonusBait(dt: number): void {
+  baitTimer -= dt;
+  if (baitTimer <= 0) {
+    baits.push(new Bait(W * (0.1 + 0.8 * Math.random()), time));
+    baitTimer = between(BAIT_EVERY);
+  }
+  for (const b of baits) {
+    const hb = b.hitbox(time);
+    if (!hb || !overlaps(hb)) continue;
+    b.eaten = true;
+    if (mode === "speed") {
+      // counts as a bite for the combo, without its own combo points
+      combo = Math.min(COMBO_MAX, combo + 1);
+      lastBite = time;
+    }
+    score += BAIT_POINTS;
+    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, at: time });
+    sound.bonus();
+  }
+}
+
+/** The gold "+300" that floats up and fades where you ate the bait. */
+function drawPopups(): void {
+  popups = popups.filter((p) => time - p.at < POPUP_TIME);
+  ctx.save();
+  ctx.font = "bold 26px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+  ctx.shadowBlur = 6;
+  for (const p of popups) {
+    const t = (time - p.at) / POPUP_TIME;
+    ctx.globalAlpha = Math.min(1, (1 - t) / 0.4);
+    ctx.fillStyle = "#ffd166";
+    ctx.fillText(p.text, p.x, p.y - 20 - 50 * t);
+  }
+  ctx.restore();
 }
 
 /** Survival, every frame: level up when it's time, and score the time you've lasted. */
@@ -1517,8 +1575,10 @@ function draw(): void {
   player.draw(ctx, time);
   for (const h of hooks) h.draw(ctx, time);
   scenery.drawFront(ctx, time);
+  for (const b of baits) b.draw(ctx, time); // in front of the sand, so it doesn't sink out of sight
   for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
 
+  drawPopups();
   drawHud();
   if (mode === "survival") drawLevelBanner();
 

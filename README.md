@@ -56,6 +56,10 @@ to the fishygame org.
   you and the screen fills with smaller fish: a feeding frenzy.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.
+- In Classic and Speed, a clump of golden fish food sinks from the surface every 40-60 s (the
+  first 15-25 s in) and rests on the sand a few seconds. Eat it for 300 points, shown as a gold
+  "+300"; in Speed it also counts as a bite for the combo. It never hangs from a line, so it can't
+  be mistaken for the hook's worm. Not in Survival.
 - Space pauses (the game also pauses if the window loses focus).
 - Grow until you nearly fill the screen to win. After a game ends, tap, click, Space or Enter
   restarts.
@@ -81,6 +85,7 @@ to the fishygame org.
 - `src/fish.ts`: the `Fish` class (movement, and drawing for both fish and sharks)
 - `src/hook.ts`: the fishing line that drops in now and then, and sometimes catches a fish
 - `src/crab.ts`: the crab that scuttles along the sand now and then
+- `src/bait.ts`: the bonus fish food that sinks from the surface now and then
 - `src/scenery.ts`: the aquarium backdrop (water, sand, seaweed, castle, treasure chest, and
   the whale and sea turtles that swim by now and then)
 - `src/sound.ts`: background music (one song after another from the playlist) and sound effects
