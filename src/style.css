@@ -84,6 +84,11 @@ canvas {
   font-size: 20px;
 }
 
+/* the last board, dimmed while the one just picked loads */
+#menu ol.stale {
+  opacity: 0.45;
+}
+
 #menu ol li {
   display: flex;
   justify-content: space-between;

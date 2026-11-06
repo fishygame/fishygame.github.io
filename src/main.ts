@@ -596,6 +596,7 @@ function moveMenuFocus(step: number): void {
 
 function loadMenuScores(): void {
   const show = (text: string) => {
+    menuScores.classList.remove("stale");
     menuScores.innerHTML = "";
     const li = document.createElement("li");
     li.style.justifyContent = "center";
@@ -608,6 +609,9 @@ function loadMenuScores(): void {
   };
   if (boards?.[period].length) renderMenuScores(boards[period]);
   else if (boards) none();
+  // switching boards: keep the last one up, dimmed, until the new one's in, rather than shrinking
+  // to a "Loading…" line and growing again a moment later (Thomas, 2026-11-05: an annoying flash)
+  else if (menuScores.children.length) menuScores.classList.add("stale");
   else show("Loading…");
   loadBoard()
     .then((fetched) => {
@@ -621,6 +625,7 @@ function loadMenuScores(): void {
 }
 
 function renderMenuScores(scores: Entry[]): void {
+  menuScores.classList.remove("stale");
   menuScores.innerHTML = "";
   scores.forEach((entry, i) => {
     const li = document.createElement("li");
