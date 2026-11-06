@@ -4,12 +4,12 @@ import { type EatSound, Sound } from "./sound";
 import { SAND_HEIGHT, Scenery } from "./scenery";
 import { HOOK_TIMING, Hook } from "./hook";
 import { CRAB_TIMING, Crab } from "./crab";
-import { Bait } from "./bait";
+import { SinkingCoin } from "./sinking-coin";
 import { Trail } from "./trail";
 import { drawChestBack, drawChestFront } from "./chest";
 import {
-  BAIT_COINS,
   COIN_RATE,
+  COIN_VALUE,
   type Equipped,
   GAME_COINS,
   type Hat,
@@ -111,11 +111,13 @@ const FRENZY_MAX_COVER = 0.8;
 const FRENZY_SPAWN_INTERVAL = 0.2;
 const GIANT_CHANCE = 0.08; // share of spawns that are giants, always much bigger than you
 const CRAB_POINTS = 50; // for eating the crab in the frenzy
-// bonus bait (not in Survival): golden fish food sinking from the surface now and then
-const BAIT_POINTS = 300; // about a fish 85% your size in Classic; in Speed it also keeps the combo going
-const BAIT_FIRST = [15, 25]; // seconds into a game before the first one
-const BAIT_EVERY = [40, 60]; // seconds between the rest
-const POPUP_TIME = 1.2; // how long the "+300" floats up
+// sinking coins (not in Survival): a single gold coin fluttering down from the surface now and then.
+// They replaced a clump of fish food worth 300 points that came every 40-60 s; a coin comes three
+// times as often for a third of the points, so a game pays about the same (Thomas, 2026-11-06).
+const COIN_POINTS = 100; // in Speed it also keeps the combo going
+const COIN_FIRST = [5, 8]; // seconds into a game before the first one
+const COIN_EVERY = [13, 20]; // seconds between the rest
+const POPUP_TIME = 1.2; // how long the "+100" floats up
 // Fish colors run from green through blue to pink, well clear of the player's orange (hue 26).
 const FISH_HUES = [90, 330];
 const PLAYER_SPEED_SMALL = 320; // top speed when you start out tiny...
@@ -343,10 +345,10 @@ let levelNews = ""; // what the new level brings, for the banner
 let levelUpAt = -Infinity;
 let stillFor = 0; // seconds held still
 let points = 0; // the score, with the fractions of a point that build up every frame
-let baits: Bait[] = [];
-let baitTimer = 0;
+let sinking: SinkingCoin[] = [];
+let coinTimer = 0;
 let popups: { x: number; y: number; text: string; coins: number; at: number }[] = [];
-let baitsEaten = 0;
+let coinsCaught = 0;
 let coinsEarned = 0; // what the game that just ended paid, for the end screen
 const wallet = new Wallet();
 const trail = new Trail();
@@ -373,7 +375,7 @@ function reset(): void {
   player.hat = wallet.wearing("hat") as Hat | null;
   trailKind = wallet.wearing("trail") as TrailKind | null;
   trail.clear();
-  baitsEaten = 0;
+  coinsCaught = 0;
   coinsEarned = 0;
   fish = [];
   score = 0;
@@ -395,9 +397,9 @@ function reset(): void {
   startedAt = time;
   combo = 0;
   timeBonus = 0;
-  baits = [];
+  sinking = [];
   popups = [];
-  baitTimer = between(BAIT_FIRST);
+  coinTimer = between(COIN_FIRST);
   myRanks = { week: -1, all: -1, players: -1 };
   syncUI();
 }
@@ -435,10 +437,10 @@ function endGame(next: State): void {
 }
 
 /** What the game that just ended pays: a coin for playing (Easy's half rounds up), for how far you grew,
- * winning and bait, times the difficulty's rate; in Survival, for each level got through. */
+ * winning and the sinking coins caught, times the difficulty's rate; in Survival, for each level got through. */
 function gameCoins(): number {
   if (mode === "survival") return survivalCoins(level);
-  const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + baitsEaten * BAIT_COINS;
+  const raw = GAME_COINS + Math.floor(progress() * PROGRESS_COINS) + (state === "won" ? WIN_COINS : 0) + coinsCaught * COIN_VALUE;
   return Math.round(raw * COIN_RATE[difficulty]);
 }
 
@@ -447,9 +449,9 @@ function coinWord(n: number): string {
   return `+${n} coin${n === 1 ? "" : "s"}`;
 }
 
-/** Bait's coins on this difficulty. */
-function baitCoins(): number {
-  return Math.round(BAIT_COINS * COIN_RATE[difficulty]);
+/** What a sinking coin pays on this difficulty. */
+function caughtCoinValue(): number {
+  return Math.round(COIN_VALUE * COIN_RATE[difficulty]);
 }
 
 /** Seconds of play so far, not counting pauses; it stops when the game ends. */
@@ -1385,7 +1387,7 @@ function update(dt: number): void {
     h.update(dt);
   }
   for (const c of crabs) c.update(dt);
-  baits = baits.filter((b) => b.update(dt, time, scenery.sandTop(b.x)));
+  sinking = sinking.filter((c) => c.update(dt, time, scenery.sandTop(c.x)));
   if (combo && time - lastBite > COMBO_WINDOW) combo = 0;
 
   for (const b of bubbles) {
@@ -1522,7 +1524,7 @@ function update(dt: number): void {
       return;
     }
   }
-  if (mode !== "survival") bonusBait(dt);
+  if (mode !== "survival") sinkingCoins(dt);
 
   for (let i = fish.length - 1; i >= 0; i--) {
     const f = fish[i];
@@ -1557,30 +1559,30 @@ function between([lo, hi]: number[]): number {
   return lo + Math.random() * (hi - lo);
 }
 
-/** Classic and Speed: drop golden fish food now and then, and pay a bonus for eating it. */
-function bonusBait(dt: number): void {
-  baitTimer -= dt;
-  if (baitTimer <= 0) {
-    baits.push(new Bait(W * (0.1 + 0.8 * Math.random()), time));
-    baitTimer = between(BAIT_EVERY);
+/** Classic and Speed: drop a gold coin now and then, and pay a bonus for eating it. */
+function sinkingCoins(dt: number): void {
+  coinTimer -= dt;
+  if (coinTimer <= 0) {
+    sinking.push(new SinkingCoin(W * (0.1 + 0.8 * Math.random()), time));
+    coinTimer = between(COIN_EVERY);
   }
-  for (const b of baits) {
-    const hb = b.hitbox(time);
+  for (const c of sinking) {
+    const hb = c.hitbox(time);
     if (!hb || !overlaps(hb)) continue;
-    b.eaten = true;
+    c.eaten = true;
     if (mode === "speed") {
       // counts as a bite for the combo, without its own combo points
       combo = Math.min(COMBO_MAX, combo + 1);
       lastBite = time;
     }
-    score += BAIT_POINTS;
-    baitsEaten++;
-    popups.push({ x: b.x, y: b.y, text: `+${BAIT_POINTS}`, coins: wallet.name ? baitCoins() : 0, at: time }); // Guests earn no coins
+    score += COIN_POINTS;
+    coinsCaught++;
+    popups.push({ x: c.x, y: c.y, text: `+${COIN_POINTS}`, coins: wallet.name ? caughtCoinValue() : 0, at: time }); // Guests earn no coins
     sound.bonus();
   }
 }
 
-/** The gold "+300" that floats up and fades where you ate the bait. */
+/** The gold "+100" that floats up and fades where you ate a sinking coin. */
 function drawPopups(): void {
   popups = popups.filter((p) => time - p.at < POPUP_TIME);
   ctx.save();
@@ -1597,7 +1599,7 @@ function drawPopups(): void {
     ctx.fillStyle = "#ffd166";
     ctx.fillText(p.text, p.x, y);
     if (p.coins) {
-      // and the coins under it: a little coin, then "+6"
+      // and the coins under it: a little coin, then "+2"
       ctx.font = "bold 18px system-ui, sans-serif";
       const label = `+${p.coins}`;
       const w = ctx.measureText(label).width;
@@ -2069,7 +2071,7 @@ function draw(): void {
   player.draw(ctx, time);
   for (const h of hooks) h.draw(ctx, time);
   scenery.drawFront(ctx, time);
-  for (const b of baits) b.draw(ctx, time); // in front of the sand, so it doesn't sink out of sight
+  for (const c of sinking) c.draw(ctx, time); // in front of the sand, so it doesn't sink out of sight
   for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
 
   drawPopups();

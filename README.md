@@ -57,12 +57,14 @@ to the fishygame org.
   you and the screen fills with smaller fish: a feeding frenzy.
 - Now and then a fishing line drops in. Touch the hook and you get reeled in (game over), unless
   you're in the frenzy, when you bite through the line instead.
-- In Classic and Speed, a clump of golden fish food sinks from the surface every 40-60 s (the
-  first 15-25 s in) and rests on the sand a few seconds. Eat it for 300 points, shown as a gold
-  "+300"; in Speed it also counts as a bite for the combo. It never hangs from a line, so it can't
-  be mistaken for the hook's worm. Not in Survival.
+- In Classic and Speed, a single gold coin drops in from the surface every 13-20 s (the first
+  5-8 s in) and flutters down like a real coin in water, tumbling end over end and drifting side to
+  side, then rocks to a stop on the sand and rests there a few seconds. Eat it for 100 points, shown
+  as a gold "+100"; in Speed it also counts as a bite for the combo. It never hangs from a line, so
+  it can't be mistaken for the hook's worm. Not in Survival. (It replaced a clump of fish food worth
+  300 points and 6 coins every 40-60 s, so a game pays about the same.)
 - Coins and the shop (called the Treasure Chest in the game): every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
-  a win and 6 per bait clump (Survival: 1 for playing, plus 1 a level got through for levels 1-3, 2
+  a win and 2 per sinking coin caught (Survival: 1 for playing, plus 1 a level got through for levels 1-3, 2
   for 4-6, 4 for 7-9, 6 for 10-12, then 8; the level banner shows each level's coins), times the difficulty (Easy x0.5,
   Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The High Scores
   screen shows each player's fish in their outfit next to their name (from their wallet; a plain
@@ -104,7 +106,7 @@ to the fishygame org.
 - `src/fish.ts`: the `Fish` class (movement, and drawing for both fish and sharks)
 - `src/hook.ts`: the fishing line that drops in now and then, and sometimes catches a fish
 - `src/crab.ts`: the crab that scuttles along the sand now and then
-- `src/bait.ts`: the bonus fish food that sinks from the surface now and then
+- `src/sinking-coin.ts`: the bonus gold coin that tumbles down from the surface now and then
 - `src/shop.ts`: the shop's items and prices, what games pay, and the wallet (local, and synced by
   username through the Lambda)
 - `src/hats.ts`, `src/trail.ts`: the shop's hats and trails (looks are in `src/fish.ts`)

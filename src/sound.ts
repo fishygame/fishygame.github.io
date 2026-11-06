@@ -312,7 +312,7 @@ export class Sound {
     vib.stop(t + len + 0.05);
   }
 
-  /** Bonus bait: a bright little ding-ding going up, with a sparkle on top. */
+  /** A sinking coin caught (and a purchase): a bright little ding-ding going up, with a sparkle on top. */
   bonus(): void {
     const ctx = this.ctx;
     if (!ctx) return;
