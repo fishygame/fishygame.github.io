@@ -499,9 +499,11 @@ export class Fish {
     ctx.beginPath();
     ctx.arc(x + size * look.x, y + size * look.y, size * 0.65, 0, Math.PI * 2);
     ctx.fill();
+    // the glint rides with the pupil, always at its upper front (light from above), so it never
+    // ends up stranded on the white when the hero glances about (Thomas, 2026-11-06)
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     ctx.beginPath();
-    ctx.arc(x + size * 0.4, y - size * 0.3, size * 0.22, 0, Math.PI * 2);
+    ctx.arc(x + size * (look.x + 0.2), y + size * (look.y - 0.3), size * 0.22, 0, Math.PI * 2);
     ctx.fill();
   }
 
