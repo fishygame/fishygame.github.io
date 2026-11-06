@@ -79,8 +79,8 @@ to the fishygame org.
   for levels in one game, plus 2 per chest coin caught; the level banner shows each level's coins.
 - **The most one game can pay:** Classic/Speed (10 + 6 win + 40 + 6 chest) x rate = **62 on Easy, 124
   on Medium, 186 on Hard**; Survival 40 + 12 = **52**. Nobody catches every coin, and a Hard win takes
-  a strong player 8-9 minutes (an Easy win about 3; from the live Speed boards). The shop is 4,360
-  coins in all; the cheapest things are 50. (Prices went from 6,550 to 13,100 and pay from x1 to x5
+  a strong player 8-9 minutes (an Easy win about 3; from the live Speed boards). The shop is 4,960
+  coins in all; the cheapest things are 50 and the Crown, the priciest, is 1,000. (Prices went from 6,550 to 13,100 and pay from x1 to x5
   and x3 while Thomas tuned it on 2026-11-06; this is the x3 pace with a coin worth what the menu
   says.) Estimates, to check against real play: a kid playing steadily earns roughly 7 coins a minute
   on Easy, more on Medium and Hard, so the first thing in a few games and everything in roughly 8-12

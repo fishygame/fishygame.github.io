@@ -49,7 +49,7 @@ export const ITEMS: Item[] = [
   { id: "tophat", slot: "hat", name: "Top hat", price: 170 },
   { id: "diving", slot: "hat", name: "Diving helmet", price: 200 },
   { id: "propeller", slot: "hat", name: "Propeller cap", price: 330 },
-  { id: "crown", slot: "hat", name: "Crown", price: 400 },
+  { id: "crown", slot: "hat", name: "Crown", price: 1000 }, // the priciest thing in the shop: it means the best (Thomas)
   { id: "bubbles", slot: "trail", name: "Bubbles", price: 100 },
   { id: "gas", slot: "trail", name: "Gas", price: 100 },
   { id: "notes", slot: "trail", name: "Music notes", price: 130 },
