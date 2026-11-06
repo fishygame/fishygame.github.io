@@ -41,7 +41,7 @@ export class Trail {
         x: x - facing * r * 1.55 + (Math.random() - 0.5) * r * 0.2,
         y: y + (Math.random() - 0.5) * r * 0.5,
         vx: -facing * 10 + (Math.random() - 0.5) * 20,
-        vy: kind === "sparkles" ? (Math.random() - 0.5) * 20 : -25 - Math.random() * 25,
+        vy: kind === "sparkles" || kind === "stars" ? (Math.random() - 0.5) * 20 : -25 - Math.random() * 25,
         age: 0,
         life: 0.8 + Math.random() * 0.6,
         size: size * (0.6 + Math.random() * 0.5),
@@ -63,6 +63,9 @@ export class Trail {
       const t = b.age / b.life;
       ctx.globalAlpha = Math.min(1, (1 - t) * 1.6);
       if (kind === "bubbles") bubble(ctx, b);
+      else if (kind === "gas") gas(ctx, b, t);
+      else if (kind === "notes") note(ctx, b, t);
+      else if (kind === "stars") star(ctx, b, t);
       else if (kind === "sparkles") sparkle(ctx, b, t, time);
       else if (kind === "hearts") heart(ctx, b, t);
     }
@@ -115,3 +118,62 @@ function heart(ctx: CanvasRenderingContext2D, b: Bit, t: number): void {
   ctx.fill();
   ctx.restore();
 }
+
+/** Gas: wobbly green bubbles. */
+function gas(ctx: CanvasRenderingContext2D, b: Bit, t: number): void {
+  const r = b.size * 0.42 * (0.8 + 0.4 * t);
+  const x = b.x + Math.sin(b.spin + t * 9) * r * 0.25;
+  ctx.fillStyle = "rgba(150, 210, 70, 0.35)";
+  ctx.strokeStyle = "rgba(190, 240, 110, 0.9)";
+  ctx.lineWidth = Math.max(1, r * 0.16);
+  ctx.beginPath();
+  ctx.ellipse(x, b.y, r * (1 + Math.sin(t * 12) * 0.08), r * (1 - Math.sin(t * 12) * 0.08), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(240, 255, 210, 0.7)";
+  ctx.beginPath();
+  ctx.arc(x - r * 0.35, b.y - r * 0.35, r * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** A music note in a pastel color, swaying as it floats up. */
+function note(ctx: CanvasRenderingContext2D, b: Bit, t: number): void {
+  const s = b.size * 0.75;
+  ctx.save();
+  ctx.translate(b.x + Math.sin(b.spin + t * 5) * s * 0.3, b.y);
+  ctx.rotate(Math.sin(b.spin + t * 4) * 0.2);
+  ctx.fillStyle = ctx.strokeStyle = `hsl(${(b.spin * 115) % 360} 85% 80%)`;
+  ctx.lineWidth = Math.max(1, s * 0.12);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, s * 0.32, s * 0.22, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(s * 0.28, -s * 0.05);
+  ctx.lineTo(s * 0.28, -s);
+  ctx.quadraticCurveTo(s * 0.7, -s * 0.8, s * 0.6, -s * 0.45);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A five-pointed gold star, turning slowly, swelling then shrinking. */
+function star(ctx: CanvasRenderingContext2D, b: Bit, t: number): void {
+  const s = b.size * 0.55 * Math.sin(Math.PI * Math.min(1, t * 1.2));
+  if (s <= 0) return;
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.spin + t * 2);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 ? s * 0.45 : s;
+    ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "#ffd166";
+  ctx.fill();
+  ctx.strokeStyle = "#c98a00";
+  ctx.lineWidth = Math.max(1, s * 0.12);
+  ctx.stroke();
+  ctx.restore();
+}
+

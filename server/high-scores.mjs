@@ -46,9 +46,9 @@ const DIFFICULTIES = ["easy", "medium", "hard"];
 const ENDS = ["won", "shark", "fish", "hook", "crab"]; // you won, or what got you
 // The shop's items by slot; must match ITEMS in src/shop.ts
 const CATALOG = {
-  look: ["clown", "spots", "silver", "gold", "midnight", "rainbow"],
-  hat: ["party", "bow", "shades", "pirate", "tophat", "crown"],
-  trail: ["bubbles", "sparkles", "hearts"],
+  look: ["clown", "spots", "tiger", "pizza", "silver", "camo", "gold", "midnight", "rainbow"],
+  hat: ["party", "bow", "shades", "viking", "pirate", "tophat", "diving", "propeller", "crown"],
+  trail: ["bubbles", "gas", "notes", "sparkles", "stars", "hearts"],
 };
 const ITEMS = new Set(Object.values(CATALOG).flat());
 const GAME_ID = /^[a-z0-9-]{6,40}$/;
@@ -206,12 +206,13 @@ async function submit(body, event) {
   if (!week) return json(503, { error: "Busy, try again" });
   const players = await place(keys.players, entry, undefined, () => getPlayers(keys, null, null, entry), topPlayers);
   if (!players) return json(503, { error: "Busy, try again" });
+  const show = await dressed([all.scores, week.scores, players.scores]);
   return json(200, {
-    scores: all.scores.map(publicEntry),
+    scores: all.scores.map(show),
     rank: all.rank,
-    weekly: week.scores.map(publicEntry),
+    weekly: week.scores.map(show),
     weeklyRank: week.rank,
-    players: players.scores.map(publicEntry),
+    players: players.scores.map(show),
     playerRank: players.rank,
   });
 }
@@ -380,6 +381,28 @@ async function syncWallet(body, event) {
   return json(503, { error: "Busy, try again" });
 }
 
+/** A board entry for the game, with the outfit (from the player's wallet) its fish wears there,
+ * looked up once per name across the boards. Names with no wallet or no outfit get a plain fish. */
+async function dressed(boards) {
+  const names = [...new Set(boards.flat().map((e) => e.name.toLowerCase()))].filter((n) => n !== "guest");
+  const outfits = new Map(
+    await Promise.all(
+      names.map(async (n) => {
+        try {
+          const { Item } = await db.send(new GetCommand({ TableName: TABLE, Key: { pk: `wallet#${n}` }, ProjectionExpression: "equipped" }));
+          return [n, realOutfit(Item?.equipped)];
+        } catch {
+          return [n, {}]; // a plain fish rather than no board
+        }
+      }),
+    ),
+  );
+  return (entry) => {
+    const outfit = outfits.get(entry.name.toLowerCase());
+    return outfit && Object.keys(outfit).length ? { ...publicEntry(entry), outfit } : publicEntry(entry);
+  };
+}
+
 function publicEntry({ name, score, time, end }) {
   return { name, score, ...(time !== undefined && { time }), ...(end && { end }) };
 }
@@ -393,10 +416,11 @@ export const handler = async (event) => {
     if (!keys) return json(400, { error: "Bad game mode" });
     const [all, week] = await Promise.all([getBoard(keys.all), getBoard(keys.week)]);
     const players = await getPlayers(keys, all, week);
+    const show = await dressed([all.scores, week.scores, players.scores]);
     return json(200, {
-      scores: all.scores.map(publicEntry),
-      weekly: week.scores.map(publicEntry),
-      players: players.scores.map(publicEntry),
+      scores: all.scores.map(show),
+      weekly: week.scores.map(show),
+      players: players.scores.map(show),
     });
   }
   if (method === "POST") {

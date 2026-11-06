@@ -9,12 +9,28 @@ const LOOK_TONE: Record<Look, { h?: number; s: number; l: number; dl: number }> 
   plain: { s: 1, l: 1, dl: 0 },
   clown: { s: 1, l: 1, dl: 0 },
   spots: { s: 1, l: 1, dl: 0 },
+  tiger: { s: 1.05, l: 1, dl: 2 },
+  pizza: { h: 36, s: 1, l: 1, dl: 6 }, // melted cheese
+  camo: { s: 1.1, l: 1, dl: 4 }, // blaze orange
   silver: { h: 210, s: 0.12, l: 1, dl: 6 },
   gold: { h: 44, s: 1.15, l: 1, dl: 4 },
   midnight: { h: 238, s: 0.6, l: 0.42, dl: 0 },
   rainbow: { s: 1, l: 1, dl: 0 },
 };
 const RAINBOW = ["#ff4d4d", "#ff9f1c", "#ffe14d", "#4cd964", "#2fa8ff", "#8f5bff"];
+// Pizza: pepperoni slices, in body lengths and heights, and their size in body heights
+const PEPPERONI = [
+  [0.32, -0.42, 0.24], [-0.02, -0.5, 0.22], [-0.4, -0.25, 0.2], [0.18, 0.1, 0.23], [-0.25, 0.32, 0.21],
+  [-0.62, 0.05, 0.15], [0.48, 0.32, 0.15],
+];
+// Camo: blotches (x, y, half width, half height, turn, shade) in body lengths and heights
+const CAMO = [
+  [0.4, -0.55, 0.16, 0.22, 0.4, 0], [0.05, -0.65, 0.2, 0.18, -0.3, 1], [-0.35, -0.5, 0.18, 0.26, 0.8, 2],
+  [-0.7, -0.1, 0.12, 0.24, 0.2, 0], [0.25, -0.1, 0.14, 0.2, -0.6, 2], [-0.1, 0.0, 0.2, 0.16, 0.3, 0],
+  [-0.45, 0.25, 0.2, 0.2, -0.4, 1], [0.1, 0.45, 0.22, 0.16, 0.1, 2], [0.55, 0.2, 0.1, 0.18, 0.7, 1],
+  [-0.15, 0.62, 0.18, 0.14, -0.2, 0],
+];
+const CAMO_SHADES = ["rgba(120, 45, 5, 0.75)", "rgba(40, 22, 10, 0.75)", "rgba(255, 170, 60, 0.7)"];
 // Spotted: where the spots go, in body lengths and heights, and their size in body heights
 const SPOTS = [
   [0.35, -0.5, 0.13], [0.05, -0.62, 0.11], [-0.3, -0.45, 0.12], [-0.6, -0.15, 0.09],
@@ -47,6 +63,7 @@ export class Fish {
   // the hero's shop cosmetics; every other fish stays plain
   look: Look = "plain";
   hat: Hat | null = null;
+  private spin = 0; // the propeller cap's turn, faster the faster the fish swims
   private gaze = { x: 0.2, y: 0 };
   private lookTo = { x: 0.2, y: 0 };
   private lookTimer = 0;
@@ -80,6 +97,7 @@ export class Fish {
   update(dt: number): void {
     if (this.darter) this.darting(dt);
     this.glance(dt);
+    if (this.hat === "propeller") this.spin += dt * (4 + Math.hypot(this.vx, this.vy) / 18);
     this.x += this.vx * (1 + this.surge) * dt;
     this.y += this.vy * dt;
   }
@@ -281,7 +299,7 @@ export class Fish {
     ctx.quadraticCurveTo(L * 0.05, B * 0.15, L * 0.25, B * 0.25);
     ctx.fill();
 
-    if (this.hat) drawHat(ctx, this.hat, this.r, time);
+    if (this.hat) drawHat(ctx, this.hat, this.r, time, this.spin + time * 4);
   }
 
   /** A color on this fish, as hsl from the plain fish's saturation and lightness, shifted for its
@@ -391,6 +409,54 @@ export class Fish {
       for (const [x, y, size] of SPOTS) {
         ctx.beginPath();
         ctx.ellipse(L * x, B * y, B * size * 1.2, B * size, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (this.look === "tiger") {
+      // tapered black stripes down from the back, and shorter ones up from the belly
+      ctx.strokeStyle = "rgba(25, 15, 10, 0.8)";
+      ctx.lineCap = "round";
+      for (let i = 0; i < 7; i++) {
+        const x = L * (0.42 - i * 0.19);
+        ctx.lineWidth = L * (0.075 - i * 0.004);
+        ctx.beginPath();
+        ctx.moveTo(x + L * 0.04, -B * 1.1);
+        ctx.quadraticCurveTo(x - L * 0.07, -B * 0.5, x + L * 0.01, -B * (0.05 + (i % 2) * 0.15));
+        ctx.stroke();
+        if (i % 2 === 0 && i < 6) {
+          ctx.lineWidth *= 0.7;
+          ctx.beginPath();
+          ctx.moveTo(x - L * 0.05, B * 1.1);
+          ctx.quadraticCurveTo(x, B * 0.75, x - L * 0.02, B * 0.45);
+          ctx.stroke();
+        }
+      }
+    } else if (this.look === "pizza") {
+      for (const [x, y, size] of PEPPERONI) {
+        const r = B * size;
+        ctx.fillStyle = "#b8322a";
+        ctx.beginPath();
+        ctx.arc(L * x, B * y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(90, 15, 10, 0.55)";
+        for (const [dx, dy] of [[-0.35, -0.2], [0.3, 0.1], [-0.05, 0.4]]) {
+          ctx.beginPath();
+          ctx.arc(L * x + r * dx, B * y + r * dy, r * 0.13, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // a few flecks of basil
+      ctx.fillStyle = "rgba(40, 120, 40, 0.8)";
+      for (const [x, y] of [[0.5, -0.1], [-0.2, -0.75], [-0.55, 0.4], [0.05, 0.75]]) {
+        ctx.beginPath();
+        ctx.ellipse(L * x, B * y, B * 0.06, B * 0.03, x * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (this.look === "camo") {
+      for (const [x, y, w, h, turn, shade] of CAMO) {
+        ctx.fillStyle = CAMO_SHADES[shade];
+        ctx.beginPath();
+        ctx.ellipse(L * x, B * y, L * w, B * h, turn, 0, Math.PI * 2);
+        ctx.ellipse(L * (x + w * 0.6), B * (y + h * 0.5), L * w * 0.6, B * h * 0.6, -turn, 0, Math.PI * 2);
         ctx.fill();
       }
     } else if (this.look === "gold" || this.look === "silver") {

@@ -692,6 +692,29 @@ function loadMenuScores(): void {
     });
 }
 
+/** A little picture of a player's fish in their outfit, for their row on the boards (Thomas,
+ * 2026-11-06: kids want their fish shown off). A plain orange fish for anyone without one. */
+function boardFish(entry: Entry): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.className = "fish-icon";
+  const dpr = window.devicePixelRatio || 1;
+  const [w, h] = [52, 34];
+  c.width = w * dpr;
+  c.height = h * dpr;
+  const g = c.getContext("2d") as CanvasRenderingContext2D;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const outfit = entry.outfit ?? wallet.outfitOf(entry.name) ?? {};
+  const f = new Fish(29, 21, 0, 0, 12.5, 26);
+  const known = (slot: Slot) => {
+    const id = outfit[slot];
+    return id && ITEMS.some((i) => i.id === id && i.slot === slot) ? id : null;
+  };
+  f.look = (known("look") as Look | null) ?? "plain";
+  f.hat = known("hat") as Hat | null;
+  f.draw(g, 0);
+  return c;
+}
+
 function renderMenuScores(scores: Entry[]): void {
   menuScores.classList.remove("stale");
   menuScores.innerHTML = "";
@@ -700,6 +723,7 @@ function renderMenuScores(scores: Entry[]): void {
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = `${i + 1}. ${entry.name}`; // textContent, so names can't inject markup
+    li.append(boardFish(entry));
     const end = document.createElement("span");
     end.className = entry.end === "won" ? "end won" : "end";
     end.textContent = entry.end ? END_LABEL[entry.end] : "";

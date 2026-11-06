@@ -6,15 +6,17 @@ import type { Hat } from "./shop";
 
 const INK = "rgba(20, 20, 30, 0.85)";
 
-export function drawHat(ctx: CanvasRenderingContext2D, hat: Hat, r: number, time: number): void {
+/** `spin` turns the propeller cap's propeller (radians; it keeps adding up). */
+export function drawHat(ctx: CanvasRenderingContext2D, hat: Hat, r: number, time: number, spin = time * 4): void {
   const lw = Math.max(1, r * 0.035);
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.lineWidth = lw;
   ctx.strokeStyle = INK;
-  if (hat === "shades") {
-    shades(ctx, r);
+  if (hat === "shades" || hat === "diving") {
+    if (hat === "shades") shades(ctx, r);
+    else diving(ctx, r);
     ctx.restore();
     return;
   }
@@ -26,7 +28,9 @@ export function drawHat(ctx: CanvasRenderingContext2D, hat: Hat, r: number, time
   else if (hat === "bow") bow(ctx, u);
   else if (hat === "pirate") pirate(ctx, u);
   else if (hat === "tophat") topHat(ctx, u);
-  else if (hat === "crown") crown(ctx, u, time); // and an unknown hat draws nothing
+  else if (hat === "crown") crown(ctx, u, time);
+  else if (hat === "viking") viking(ctx, u);
+  else if (hat === "propeller") propeller(ctx, u, spin); // and an unknown hat draws nothing
   ctx.restore();
 }
 
@@ -267,3 +271,133 @@ function shades(ctx: CanvasRenderingContext2D, r: number): void {
   ctx.closePath();
   ctx.fill();
 }
+
+function viking(ctx: CanvasRenderingContext2D, u: number): void {
+  // horns first, so the helmet sits over their roots
+  ctx.fillStyle = "#f1e6c8";
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * u * 0.42, -u * 0.25);
+    ctx.quadraticCurveTo(s * u * 1.05, -u * 0.35, s * u * 0.95, -u * 1.2);
+    ctx.quadraticCurveTo(s * u * 0.8, -u * 0.6, s * u * 0.3, -u * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // the dome
+  ctx.beginPath();
+  ctx.moveTo(-u * 0.6, 0);
+  ctx.quadraticCurveTo(-u * 0.6, -u * 0.85, 0, -u * 0.85);
+  ctx.quadraticCurveTo(u * 0.6, -u * 0.85, u * 0.6, 0);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, -u * 0.85, 0, 0);
+  g.addColorStop(0, "#d8dde3");
+  g.addColorStop(1, "#7d868f");
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.stroke();
+  // a riveted band round the bottom
+  ctx.fillStyle = "#a07a3a";
+  ctx.fillRect(-u * 0.6, -u * 0.2, u * 1.2, u * 0.2);
+  ctx.strokeRect(-u * 0.6, -u * 0.2, u * 1.2, u * 0.2);
+  ctx.fillStyle = "#f3e2a0";
+  for (const x of [-0.42, -0.14, 0.14, 0.42]) {
+    ctx.beginPath();
+    ctx.arc(u * x, -u * 0.1, u * 0.04, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** A beanie in four colors with a propeller on top; `spin` turns it. */
+function propeller(ctx: CanvasRenderingContext2D, u: number, spin: number): void {
+  const colors = ["#e0364a", "#ffd166", "#2f8cff", "#4cd964"];
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(-u * 0.62, 0);
+  ctx.quadraticCurveTo(-u * 0.62, -u * 0.7, 0, -u * 0.7);
+  ctx.quadraticCurveTo(u * 0.62, -u * 0.7, u * 0.62, 0);
+  ctx.closePath();
+  ctx.clip();
+  colors.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(-u * 0.62 + (i * u * 1.24) / 4, -u * 0.8, (u * 1.24) / 4 + 0.5, u * 0.8);
+  });
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(-u * 0.62, 0);
+  ctx.quadraticCurveTo(-u * 0.62, -u * 0.7, 0, -u * 0.7);
+  ctx.quadraticCurveTo(u * 0.62, -u * 0.7, u * 0.62, 0);
+  ctx.closePath();
+  ctx.stroke();
+  // the stalk
+  ctx.fillStyle = "#555";
+  ctx.fillRect(-u * 0.04, -u * 1.0, u * 0.08, u * 0.32);
+  // two blades seen side on: each one's length shrinks and grows as it turns toward and away from you
+  const y = -u * 1.0;
+  for (const [offset, color] of [[0, "#e0364a"], [Math.PI, "#2f8cff"]] as const) {
+    const reach = Math.cos(spin + offset) * u * 0.8;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(reach / 2, y, Math.abs(reach) / 2 + u * 0.03, u * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#ffd166";
+  ctx.beginPath();
+  ctx.arc(0, y, u * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** An old brass diving helmet over the head, with a round window in front of the eye (at L * 0.58,
+ * -B * 0.18 on the body; see Fish.drawFish), so you can still see the eye looking about. */
+function diving(ctx: CanvasRenderingContext2D, r: number): void {
+  const cx = r * 0.66;
+  const cy = r * -0.1;
+  const R = r * 0.5;
+  // the brass dome, open at the back where it meets the collar
+  const g = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.4, R * 0.1, cx, cy, R);
+  g.addColorStop(0, "#ffe7a3");
+  g.addColorStop(0.5, "#d9a441");
+  g.addColorStop(1, "#8a5d17");
+  const wx = r * 0.696;
+  const wy = r * -0.112;
+  const wr = r * 0.24;
+  ctx.fillStyle = g;
+  ctx.strokeStyle = "#5b3b0c";
+  ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.moveTo(wx + wr, wy);
+  ctx.arc(wx, wy, wr, 0, Math.PI * 2, true);
+  ctx.fill("evenodd"); // a hole where the window is, so the eye shows through
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.stroke();
+  // collar
+  ctx.fillStyle = "#b8862e";
+  ctx.beginPath();
+  ctx.roundRect(cx - R * 1.05, cy - R * 0.85, R * 0.32, R * 1.9, R * 0.1);
+  ctx.fill();
+  ctx.stroke();
+  // window over the eye: a tint of glass, a thick brass rim, bolts
+  ctx.fillStyle = "rgba(170, 220, 255, 0.25)";
+  ctx.beginPath();
+  ctx.arc(wx, wy, wr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, r * 0.06);
+  ctx.strokeStyle = "#a8741f";
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.beginPath();
+  ctx.ellipse(wx - wr * 0.4, wy - wr * 0.4, wr * 0.22, wr * 0.1, -0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#6b4511";
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(wx + Math.cos(a) * wr * 1.25, wy + Math.sin(a) * wr * 1.25, r * 0.03, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+

@@ -131,6 +131,13 @@ r = await post({ name: "Hunter", score: 600, mode: "classic", difficulty: "hard"
 assert.equal(r.statusCode, 429); // the score cooldown itself is unchanged
 r = await get({ mode: "classic", difficulty: "hard" });
 assert.equal(body(r).scores[0].score, 500);
+// each board entry wears its player's outfit (Hunter's is the gold look), matched whatever the capitals
+assert.deepEqual(body(r).scores[0].outfit, { look: "gold" });
+assert.deepEqual(body(r).players[0].outfit, { look: "gold" });
+r = await post({ name: "Nobody", score: 300, mode: "classic", difficulty: "hard", end: "fish" }, "8.8.8.8");
+assert.equal(body(r).scores[1].name, "Nobody");
+assert.equal(body(r).scores[1].outfit, undefined); // no wallet: a plain fish
+assert.deepEqual(body(r).scores[0].outfit, { look: "gold" });
 r = await post({ name: "Hunter", score: 1, mode: "bogus" });
 assert.equal(r.statusCode, 400);
 r = await handler({ requestContext: { http: { method: "POST" } }, body: "not json" });

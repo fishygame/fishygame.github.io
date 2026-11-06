@@ -105,18 +105,32 @@ canvas {
 }
 
 /* each row: rank and name, how the game ended, the time (Speed), the score */
+/* each player's fish, in their outfit */
+#menu ol li .fish-icon {
+  flex: none;
+  width: 52px;
+  height: 34px;
+  margin: -3px -6px -3px -4px; /* the picture has room for hats; let the rows stay close */
+  align-self: center;
+}
+
 #menu ol li .name {
-  flex: 0 0 6.6em;
+  flex: 0 1 6.6em; /* shrinks (with an ellipsis) rather than push the score off a phone */
+  min-width: 3.5em;
   text-align: left;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 #menu ol li .end {
   flex: 1;
+  min-width: 0;
   text-align: left;
   font-size: 15px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   opacity: 0.8;
 }
 
@@ -146,6 +160,11 @@ canvas {
   #menu ol li .end,
   #menu ol li .time {
     font-size: 13px;
+  }
+  #menu ol li .fish-icon {
+    width: 42px;
+    height: 27px;
+    margin: -2px -4px -2px -4px;
   }
 }
 

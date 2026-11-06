@@ -63,7 +63,9 @@ to the fishygame org.
   be mistaken for the hook's worm. Not in Survival.
 - Coins and the shop (called the Treasure Chest in the game): every game pays coins: 1 for playing, 1 per tenth of the growth bar, 6 for
   a win and 6 per bait clump (Survival: 2 per level reached), times the difficulty (Easy x0.5,
-  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The Shop sells
+  Medium x1, Hard x2; Survival x1). The main menu shows each difficulty's rate. The High Scores
+  screen shows each player's fish in their outfit next to their name (from their wallet; a plain
+  fish if they have none). The Shop sells
   looks, hats and trails for your fish (cosmetics only, so the boards stay about skill), tried on
   in a live preview. Prices are in `ITEMS` in `src/shop.ts`.
 - Players: the main menu's "Playing as ..." picks who's playing, so a family can share one device
@@ -158,7 +160,8 @@ block a player's syncing. Nothing new means no write, and each IP gets 30 wallet
 prices of what's owned). **The Lambda's `CATALOG` must list the same item ids as `ITEMS` in
 `src/shop.ts`: when adding an item, deploy the Lambda first.** The game also ignores any item it
 doesn't know, so an old page never crashes on a newer item. If a player's coins can't reach the
-server, the Who's playing? screen says so and the game retries every 30 seconds. Deploy the Lambda
+server, the Who's playing? screen says so and the game retries every 30 seconds. Board responses (GET and a saved score's POST) give each entry its player's `outfit`, looked up
+from the wallets (one read per name on the boards). Deploy the Lambda
 before a game that syncs wallets.
 
 To test the Lambda without touching the real boards or wallets: `node server/dev/test.mjs` runs

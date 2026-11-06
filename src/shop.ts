@@ -15,9 +15,9 @@ import { API, LOCAL, NAME_MAX } from "./highscores";
 import type { Difficulty } from "./settings";
 
 export type Slot = "look" | "hat" | "trail";
-export type Look = "plain" | "clown" | "spots" | "silver" | "gold" | "midnight" | "rainbow";
-export type Hat = "party" | "bow" | "shades" | "pirate" | "tophat" | "crown";
-export type TrailKind = "bubbles" | "sparkles" | "hearts";
+export type Look = "plain" | "clown" | "spots" | "tiger" | "pizza" | "silver" | "camo" | "gold" | "midnight" | "rainbow";
+export type Hat = "party" | "bow" | "shades" | "viking" | "pirate" | "tophat" | "diving" | "propeller" | "crown";
+export type TrailKind = "bubbles" | "gas" | "notes" | "sparkles" | "stars" | "hearts";
 
 export interface Item {
   id: Look | Hat | TrailKind;
@@ -28,21 +28,32 @@ export interface Item {
 
 // "Looks" are patterns and finishes on the orange hero, never a plain color swap: the other fish
 // use hues from green through pink, and red clashes with the danger outlines, so a blue or green
-// hero would vanish into the crowd.
+// hero would vanish into the crowd (so Camo is blaze orange hunting camo, not green). Each slot is
+// cheapest first; 9 looks, 9 hats and 6 trails fill the shop's rows of 3. The Lambda's CATALOG
+// must list the same ids: deploy it first when adding one.
 export const ITEMS: Item[] = [
   { id: "clown", slot: "look", name: "Clownfish", price: 100 },
   { id: "spots", slot: "look", name: "Spotted", price: 100 },
+  { id: "tiger", slot: "look", name: "Tiger", price: 150 },
+  { id: "pizza", slot: "look", name: "Pizza", price: 200 },
   { id: "silver", slot: "look", name: "Silver", price: 200 },
+  { id: "camo", slot: "look", name: "Camo", price: 250 },
   { id: "gold", slot: "look", name: "Gold", price: 400 },
   { id: "midnight", slot: "look", name: "Midnight", price: 400 },
   { id: "rainbow", slot: "look", name: "Rainbow", price: 1000 },
   { id: "party", slot: "hat", name: "Party hat", price: 75 },
   { id: "bow", slot: "hat", name: "Bow", price: 75 },
   { id: "shades", slot: "hat", name: "Sunglasses", price: 150 },
+  { id: "viking", slot: "hat", name: "Viking horns", price: 200 },
   { id: "pirate", slot: "hat", name: "Pirate hat", price: 250 },
   { id: "tophat", slot: "hat", name: "Top hat", price: 250 },
+  { id: "diving", slot: "hat", name: "Diving helmet", price: 300 },
+  { id: "propeller", slot: "hat", name: "Propeller cap", price: 500 },
   { id: "crown", slot: "hat", name: "Crown", price: 600 },
   { id: "bubbles", slot: "trail", name: "Bubbles", price: 150 },
+  { id: "gas", slot: "trail", name: "Gas", price: 150 },
+  { id: "notes", slot: "trail", name: "Music notes", price: 200 },
+  { id: "stars", slot: "trail", name: "Stars", price: 250 },
   { id: "sparkles", slot: "trail", name: "Sparkles", price: 300 },
   { id: "hearts", slot: "trail", name: "Hearts", price: 300 },
 ];
@@ -274,6 +285,12 @@ export class Wallet {
 
   owns(id: string): boolean {
     return this.s.owned.includes(id);
+  }
+
+  /** The outfit of a player on this device, by name (any capitals), or null if there's no such
+   * player: the boards' fish fall back on it (itch keeps no wallets on a server). */
+  outfitOf(name: string): Equipped | null {
+    return this.d.players[name.trim().toLowerCase()]?.equipped ?? null;
   }
 
   /** What's on in a slot, if it's something this version of the game has. */

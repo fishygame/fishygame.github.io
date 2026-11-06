@@ -8,6 +8,7 @@
 // ten places.
 
 import type { Difficulty, Mode } from "./settings";
+import type { Equipped } from "./shop";
 
 export const LOCAL = import.meta.env.VITE_SCORE_BOARD === "local";
 export const BOARD_TITLE = LOCAL ? "Your best scores" : "High scores";
@@ -47,6 +48,7 @@ export interface Entry {
   score: number;
   time?: number; // Speed and Survival boards: how long the game took, in whole seconds
   end?: End; // scores saved before 2026-11-02 have none
+  outfit?: Equipped; // what the player's fish wears, from their wallet (family site; none if plain)
 }
 
 /** A mode and difficulty's two boards. */
