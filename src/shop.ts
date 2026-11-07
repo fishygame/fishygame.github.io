@@ -36,7 +36,7 @@ export const ITEMS: Item[] = [
   { id: "spots", slot: "look", name: "Spotted", price: 70 },
   { id: "tiger", slot: "look", name: "Tiger", price: 100 },
   { id: "pizza", slot: "look", name: "Pizza", price: 130 },
-  { id: "silver", slot: "look", name: "Silver", price: 130 },
+  { id: "silver", slot: "look", name: "Silver Sequins", price: 130 }, // was flat Silver; id kept so owners keep it
   { id: "camo", slot: "look", name: "Camo", price: 170 },
   { id: "gold", slot: "look", name: "Gold", price: 270 },
   { id: "midnight", slot: "look", name: "Midnight", price: 270 },

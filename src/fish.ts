@@ -14,14 +14,17 @@ export interface Capsule {
 
 // How each shop look shifts the hero's colors: a fixed hue (or the fish's own), and saturation and
 // lightness scaled and nudged. Clownfish, Spotted and Rainbow keep the orange and add a pattern.
-const LOOK_TONE: Record<Look, { h?: number; s: number; l: number; dl: number }> = {
+// `edge` and `edgeW` swap the body's own outline (and gill and mouth) for a set color and width.
+const LOOK_TONE: Record<Look, { h?: number; s: number; l: number; dl: number; edge?: string; edgeW?: number }> = {
   plain: { s: 1, l: 1, dl: 0 },
   clown: { s: 1, l: 1, dl: 0 },
   spots: { s: 1, l: 1, dl: 0 },
   tiger: { s: 1.05, l: 1, dl: 2 },
   pizza: { h: 36, s: 1, l: 1, dl: 6 }, // melted cheese
   camo: { s: 1.1, l: 1, dl: 4 }, // blaze orange
-  silver: { h: 210, s: 0.12, l: 1, dl: 6 },
+  // Silver Sequins (2026-11-06): the old flat blue-grey Silver vanished in blue water, so it's now a
+  // near-neutral grey covered in mirror sequins with a black outline (Thomas's wife's pick)
+  silver: { h: 210, s: 0.04, l: 1.02, dl: 8, edge: "#1b2026", edgeW: 1.4 },
   gold: { h: 44, s: 1.15, l: 1, dl: 4 },
   midnight: { h: 238, s: 0.6, l: 0.42, dl: 0 },
   rainbow: { s: 1, l: 1, dl: 0 },
@@ -393,8 +396,10 @@ export class Fish {
   private fishBodyParts(ctx: CanvasRenderingContext2D, danger: boolean): void {
     const L = this.r * 1.2;
     const B = this.r * 0.62;
-    const edge = danger ? "rgba(235, 50, 50, 0.95)" : this.tone(60, 25, 0.8);
+    const t = LOOK_TONE[this.look] ?? LOOK_TONE.plain;
+    const edge = danger ? "rgba(235, 50, 50, 0.95)" : (t.edge ?? this.tone(60, 25, 0.8));
     const lw = Math.max(1, this.r * 0.05);
+    const sequins = this.look === "silver";
 
     // dorsal and anal fins
     ctx.fillStyle = this.tone(70, 45, 0.9);
@@ -419,29 +424,33 @@ export class Fish {
     ctx.fillStyle = g;
     ctx.fill();
     ctx.strokeStyle = edge;
-    ctx.lineWidth = danger ? this.dangerWidth() : lw;
+    ctx.lineWidth = danger ? this.dangerWidth() : lw * (t.edgeW ?? 1);
     ctx.stroke();
 
-    // scale pattern, clipped to the body
+    // scale pattern, clipped to the body (sequins cover the scales with their own)
     ctx.save();
     this.fishBody(ctx, L, B);
     ctx.clip();
-    ctx.strokeStyle = this.tone(60, 30, 0.18);
-    ctx.lineWidth = lw;
-    const step = B * 0.32;
-    const a0 = -Math.PI / 2.5;
-    ctx.beginPath();
-    for (let sx = -L * 0.6; sx < L * 0.3; sx += step) {
-      for (let sy = -B; sy < B; sy += step) {
-        const off = (Math.round((sx + L) / step) % 2) * step * 0.5;
-        const [cx, cy, rr] = [sx, sy + off, step * 0.55];
-        ctx.moveTo(cx + rr * Math.cos(a0), cy + rr * Math.sin(a0));
-        ctx.arc(cx, cy, rr, a0, -a0);
+    if (sequins) this.sequins(ctx, L, B);
+    else {
+      ctx.strokeStyle = this.tone(60, 30, 0.18);
+      ctx.lineWidth = lw;
+      const step = B * 0.32;
+      const a0 = -Math.PI / 2.5;
+      ctx.beginPath();
+      for (let sx = -L * 0.6; sx < L * 0.3; sx += step) {
+        for (let sy = -B; sy < B; sy += step) {
+          const off = (Math.round((sx + L) / step) % 2) * step * 0.5;
+          const [cx, cy, rr] = [sx, sy + off, step * 0.55];
+          ctx.moveTo(cx + rr * Math.cos(a0), cy + rr * Math.sin(a0));
+          ctx.arc(cx, cy, rr, a0, -a0);
+        }
       }
+      ctx.stroke();
     }
-    ctx.stroke();
     // lateral line
     ctx.strokeStyle = this.tone(60, 30, 0.3);
+    ctx.lineWidth = lw;
     ctx.beginPath();
     ctx.moveTo(L * 0.4, -B * 0.2);
     ctx.quadraticCurveTo(0, -B * 0.35, -L * 0.75, 0);
@@ -450,14 +459,14 @@ export class Fish {
     ctx.restore();
 
     // gill
-    ctx.strokeStyle = this.tone(60, 28, 0.6);
+    ctx.strokeStyle = t.edge ? t.edge + "aa" : this.tone(60, 28, 0.6);
     ctx.lineWidth = lw * 1.3;
     ctx.beginPath();
     ctx.arc(L * 0.15, 0, B * 0.75, -Math.PI / 3.2, Math.PI / 3.2);
     ctx.stroke();
 
     // mouth
-    ctx.strokeStyle = this.tone(50, 20, 0.8);
+    ctx.strokeStyle = t.edge ?? this.tone(50, 20, 0.8);
     ctx.beginPath();
     ctx.moveTo(L * 0.98, B * 0.12);
     ctx.lineTo(L * 0.82, B * 0.18);
@@ -560,6 +569,24 @@ export class Fish {
         ctx.fill();
       }
       ctx.shadowBlur = 0;
+    }
+  }
+
+  /** Silver Sequins: every scale a little mirror disc, some bright, some dark, a fixed mix (the
+   * body is a cached sprite, so it never flickers). The shoulder shine goes over it in pattern(). */
+  private sequins(ctx: CanvasRenderingContext2D, L: number, B: number): void {
+    const step = B * 0.3;
+    let n = 0;
+    for (let sx = -L * 0.9; sx < L; sx += step) {
+      for (let sy = -B * 1.1; sy < B * 1.1; sy += step) {
+        const off = (Math.round((sx + L) / step) % 2) * step * 0.5;
+        const h = (Math.abs(Math.sin(n++ * 12.9898) * 43758.5453)) % 1; // the same shade every time
+        const light = h < 0.18 ? 96 : h < 0.35 ? 34 : 55 + h * 35;
+        ctx.fillStyle = `hsl(210 8% ${light}%)`;
+        ctx.beginPath();
+        ctx.arc(sx, sy + off, step * 0.48, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
