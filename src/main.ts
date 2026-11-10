@@ -145,8 +145,18 @@ const SKELETON_FLOAT_SPEED = 25; // px/s they drift up afterwards
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
-let W = 0;
-let H = 0;
+// The sea is always W × H game units, scaled to fit the window (Thomas, 2026-11-10). It used to be
+// the window itself, in CSS pixels, with fish a fixed number of pixels: zooming the browser out (or a
+// bigger monitor) gave a bigger sea of tiny, slow-looking fish, which made Survival easy and Classic
+// longer, and a small screen left no room to dodge. Now everyone plays the same sea; a screen of
+// another shape gets dimmed bars at the sides or top and bottom. The HUD, buttons and end screen are
+// drawn at screen size (SW × SH, CSS pixels) so they stay readable.
+const W = 1440;
+const H = 810;
+let SW = 0;
+let SH = 0;
+let dpr = 1;
+const view = { s: 1, x: 0, y: 0 }; // the sea's scale and its top-left corner on the screen
 const scenery = new Scenery();
 // The first of each is the one hook and crab of Classic and Speed (and behind the menu); the rest
 // only come out in Survival.
@@ -162,18 +172,37 @@ const crabs = Array.from({ length: MAX_CRABS }, (_, i) => {
 });
 
 function resize(): void {
-  const dpr = window.devicePixelRatio || 1;
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width = Math.floor(W * dpr);
-  canvas.height = Math.floor(H * dpr);
+  dpr = window.devicePixelRatio || 1;
+  SW = window.innerWidth;
+  SH = window.innerHeight;
+  canvas.width = Math.floor(SW * dpr);
+  canvas.height = Math.floor(SH * dpr);
   // size in CSS pixels to match exactly; 100vh is taller than the visible area in iPad Safari
-  canvas.style.width = `${W}px`;
-  canvas.style.height = `${H}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  scenery.resize(W, H, dpr);
+  canvas.style.width = `${SW}px`;
+  canvas.style.height = `${SH}px`;
+  view.s = Math.min(SW / W, SH / H);
+  view.x = (SW - W * view.s) / 2;
+  view.y = (SH - H * view.s) / 2;
+  screenSpace();
+  scenery.resize(W, H, dpr * view.s); // its cached floor drawn at the sea's real resolution
   for (const h of hooks) h.resize(W, H);
   for (const c of crabs) c.resize(W, H);
+}
+
+/** Draw in CSS pixels of the window (the HUD, buttons, end screen). */
+function screenSpace(): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+/** Draw in sea units, clipped to the sea, so nothing shows in the bars. */
+function inWorld(paint: () => void): void {
+  ctx.save();
+  ctx.setTransform(dpr * view.s, 0, 0, dpr * view.s, dpr * view.x, dpr * view.y);
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+  ctx.clip();
+  paint();
+  ctx.restore();
 }
 window.addEventListener("resize", resize);
 // The browser can drop the canvas now and then (a graphics driver reset, say). It comes back blank
@@ -205,7 +234,7 @@ const BUTTONS: Button[] = ["pause", "next", "mute"];
 /** In a row in the top-right corner: pause (only while playing), next song, mute. */
 function buttonPos(b: Button): { x: number; y: number } {
   const y = 16 + BUTTON_R;
-  const muteX = W - 16 - BUTTON_R;
+  const muteX = SW - 16 - BUTTON_R;
   const step = BUTTON_R * 2 + 12;
   return { x: muteX - step * (b === "mute" ? 0 : b === "next" ? 1 : 2), y };
 }
@@ -1343,8 +1372,8 @@ function spawnFish(): void {
   launch(r, shark, giant, tuning.fastChance).darter = shark && Math.random() < tuning.darterChance;
 }
 
-/** Survival's fish count is for a 1280×800 screen; a bigger screen gets more (and a phone fewer),
- * so it's just as crowded. */
+/** Survival's fish counts were tuned for a 1280×800 sea; the sea is a fixed W × H now, so this is
+ * the same for everyone, just keeping the crowd as thick as it was tuned. */
 function screenScale(): number {
   return Math.min(2, Math.max(0.5, (W * H) / (1280 * 800)));
 }
@@ -1969,16 +1998,16 @@ function drawLevelBanner(): void {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "bold 48px system-ui, sans-serif";
-  ctx.fillText(`Level ${level}`, W / 2, H * 0.3);
+  ctx.fillText(`Level ${level}`, SW / 2, SH * 0.3);
   ctx.font = "22px system-ui, sans-serif";
   ctx.fillStyle = "#ffd166";
-  ctx.fillText(levelNews, W / 2, H * 0.3 + 44, W - 32);
+  ctx.fillText(levelNews, SW / 2, SH * 0.3 + 44, SW - 32);
   // what getting through the last level paid (a named player only; Guests earn nothing)
   if (level > 1 && wallet.name) {
     ctx.font = "bold 20px system-ui, sans-serif";
     ctx.fillStyle = "#fff1a8";
     const paid = survivalCoins(level) - survivalCoins(level - 1); // nothing once the game's most is reached
-    if (paid) ctx.fillText(coinWord(paid), W / 2, H * 0.3 + 78);
+    if (paid) ctx.fillText(coinWord(paid), SW / 2, SH * 0.3 + 78);
   }
   ctx.restore();
 }
@@ -2066,22 +2095,24 @@ function drawButtons(): void {
 
 function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-  ctx.fillRect(0, 0, W, H);
-  // keep the fish that got you lit up, so it's clear what happened
-  if (state === "dead" && killer) {
-    killer.draw(ctx, time, true);
-    player.draw(ctx, time);
-  }
-  if (state === "dead" && hooked) {
-    player.draw(ctx, time);
-    catcher.draw(ctx, time);
-  }
-  if (state === "dead" && pinched) {
-    pincher.draw(ctx);
-    player.draw(ctx, time);
-  }
-  // and show off how enormous you got
-  if (state === "won") player.draw(ctx, time);
+  ctx.fillRect(0, 0, SW, SH);
+  inWorld(() => {
+    // keep the fish that got you lit up, so it's clear what happened
+    if (state === "dead" && killer) {
+      killer.draw(ctx, time, true);
+      player.draw(ctx, time);
+    }
+    if (state === "dead" && hooked) {
+      player.draw(ctx, time);
+      catcher.draw(ctx, time);
+    }
+    if (state === "dead" && pinched) {
+      pincher.draw(ctx);
+      player.draw(ctx, time);
+    }
+    // and show off how enormous you got
+    if (state === "won") player.draw(ctx, time);
+  });
   ctx.save();
   ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
   ctx.shadowBlur = 8;
@@ -2094,21 +2125,21 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   const scoreLine = `Score: ${score.toLocaleString()}${took}${reached}${bonus}`;
   showBoard &&= boards !== null;
 
-  // typing a name: everything moves up, and the name form (CSS) sits at H / 2 - 10
+  // typing a name: everything moves up, and the name form (CSS) sits at SH / 2 - 10
   if (showBoard && entering) {
-    const top = H / 2 - 150;
+    const top = SH / 2 - 150;
     drawTitle(title, scoreLine, top);
     ctx.font = "18px system-ui, sans-serif";
     ctx.fillStyle = "#ffd166";
-    ctx.fillText(LOCAL ? "High score! Type your initials:" : "New high score! Type your name:", W / 2, top + 90);
+    ctx.fillText(LOCAL ? "High score! Type your initials:" : "New high score! Type your name:", SW / 2, top + 90);
     ctx.restore();
     return;
   }
   if (!showBoard) {
-    const top = H / 2 - 30;
+    const top = SH / 2 - 30;
     drawTitle(title, scoreLine, top);
     ctx.font = "18px system-ui, sans-serif";
-    ctx.fillText(subtitle, W / 2, top + 90);
+    ctx.fillText(subtitle, SW / 2, top + 90);
     ctx.restore();
     if (gameOver()) toMenu.style.top = `${top + 120}px`;
     return;
@@ -2119,20 +2150,20 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
   // else this week, else player best.
   const half = boardHalf();
   const panels: Period[] =
-    W >= 4 * half + 56
+    SW >= 4 * half + 56
       ? ["week", myRanks.all < 0 && myRanks.players >= 0 ? "players" : "all"]
       : [myRanks.all >= 0 ? "all" : myRanks.week < 0 && myRanks.players >= 0 ? "players" : "week"];
   // Rows shrink to fit a short screen, down to a point; past that, only the top few (and yours) show.
   const n = Math.max(1, ...panels.map((p) => boards![p].length));
-  const room = H - 24 - BOARD_EXTRA;
+  const room = SH - 24 - BOARD_EXTRA;
   const rowH = Math.max(MIN_ROW_H, Math.min(ROW_H, room / n));
   const rows = Math.max(1, Math.min(n, Math.floor(room / rowH)));
-  const top = Math.max(42, (H - BOARD_EXTRA - rows * rowH) / 2 + 30);
+  const top = Math.max(42, (SH - BOARD_EXTRA - rows * rowH) / 2 + 30);
   drawTitle(title, scoreLine, top);
   ctx.font = "18px system-ui, sans-serif";
-  ctx.fillText(subtitle, W / 2, top + 90);
+  ctx.fillText(subtitle, SW / 2, top + 90);
   panels.forEach((p, i) => {
-    const cx = panels.length === 1 ? W / 2 : W / 2 + (i === 0 ? -1 : 1) * (half + 12);
+    const cx = panels.length === 1 ? SW / 2 : SW / 2 + (i === 0 ? -1 : 1) * (half + 12);
     drawBoard(p, cx, top + 140, half, rowH, rows);
   });
   ctx.restore();
@@ -2142,7 +2173,7 @@ function drawOverlay(title: string, subtitle: string, showBoard = false): void {
 /** Half a board's width on the end screen: room for the rank, name, ending and score, and on
  * Speed and Survival boards the time too. */
 function boardHalf(): number {
-  return Math.min(mode === "survival" ? 250 : timed() ? 230 : 195, W / 2 - 8); // narrower on a phone held upright
+  return Math.min(mode === "survival" ? 250 : timed() ? 230 : 195, SW / 2 - 8); // narrower on a phone held upright
 }
 
 // The end screen from the title's top to the Main menu button's bottom, besides the board's rows.
@@ -2152,9 +2183,9 @@ const MIN_ROW_H = 20;
 
 function drawTitle(title: string, scoreLine: string, top: number): void {
   ctx.font = "bold 56px system-ui, sans-serif";
-  ctx.fillText(title, W / 2, top);
+  ctx.fillText(title, SW / 2, top);
   ctx.font = "24px system-ui, sans-serif";
-  ctx.fillText(scoreLine, W / 2, top + 50);
+  ctx.fillText(scoreLine, SW / 2, top + 50);
 }
 
 /** One board, centered on cx with its heading at y, showing up to `rows` rows. If yours is below
@@ -2222,29 +2253,62 @@ function drawBoard(period: Period, cx: number, y: number, half: number, rowH: nu
   ctx.textAlign = "center";
 }
 
+/** Outside the sea, on a screen of another shape: the same water, dimmed, so it reads as a frame. */
+function drawBars(): void {
+  const g = ctx.createLinearGradient(0, 0, 0, SH);
+  g.addColorStop(0, "#2f6f93");
+  g.addColorStop(1, "#0c3a5c");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, SW, SH);
+  // a soft shadow where the sea meets the frame
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 10, 25, 0.6)";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#13649e";
+  ctx.fillRect(view.x, view.y, W * view.s, H * view.s);
+  ctx.restore();
+  // a phone held upright gets a thin strip of sea: suggest turning it
+  if (touchUI && view.y > 40) {
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.font = "16px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Turn your phone sideways for a bigger sea", SW / 2, SH - view.y / 2, SW - 32);
+    ctx.restore();
+  }
+}
+
 function draw(): void {
-  drawBackground();
+  screenSpace();
+  drawBars();
 
   if (state === "menu") {
-    for (const f of fish) f.draw(ctx, time);
-    for (const h of hooks) h.draw(ctx, time);
-    scenery.drawFront(ctx, time);
-    for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
+    inWorld(() => {
+      drawBackground();
+      for (const f of fish) f.draw(ctx, time);
+      for (const h of hooks) h.draw(ctx, time);
+      scenery.drawFront(ctx, time);
+      for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
+    });
     drawButtons();
     return;
   }
 
-  // no outlines in Survival: everything can eat you
-  const outlines = tuning.outlines && mode !== "survival";
-  for (const f of fish) f.draw(ctx, time, outlines && dangerous(f));
-  trail.draw(ctx, trailKind, time);
-  player.draw(ctx, time);
-  for (const h of hooks) h.draw(ctx, time);
-  scenery.drawFront(ctx, time);
-  for (const c of sinking) c.draw(ctx, time); // in front of the sand, so it doesn't sink out of sight
-  for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
+  inWorld(() => {
+    drawBackground();
+    // no outlines in Survival: everything can eat you
+    const outlines = tuning.outlines && mode !== "survival";
+    for (const f of fish) f.draw(ctx, time, outlines && dangerous(f));
+    trail.draw(ctx, trailKind, time);
+    player.draw(ctx, time);
+    for (const h of hooks) h.draw(ctx, time);
+    scenery.drawFront(ctx, time);
+    for (const c of sinking) c.draw(ctx, time); // in front of the sand, so it doesn't sink out of sight
+    for (const c of crabs) c.draw(ctx); // on the front of the sand, so in front of the seaweed too
+    drawPopups();
+  });
 
-  drawPopups();
   drawHud();
   if (mode === "survival") drawLevelBanner();
 
